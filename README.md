@@ -82,7 +82,7 @@ echo '<___Provided Json Key___>' > secrets/bucket-reader.json
 
 #### Create Docker network
 ```
-sudo docker network create cheese-app
+sudo docker network create cheese-app-network
 ```
 
 #### Run api-service
@@ -94,7 +94,7 @@ sudo docker run -d --name api-service \
 -p 9000:9000 \
 -e GOOGLE_APPLICATION_CREDENTIALS=/secrets/bucket-reader.json \
 -e GCS_BUCKET_NAME=cheese-app-models \
---network cheese-app dlops/cheese-app-api-service
+--network cheese-app-network dlops/cheese-app-api-service
 ```
 
 
@@ -107,13 +107,13 @@ sudo docker run --rm -ti --name api-service \
 -e GOOGLE_APPLICATION_CREDENTIALS=/secrets/bucket-reader.json \
 -e GCS_BUCKET_NAME=cheese-app-models \
 -e DEV=1 \
---network cheese-app dlops/cheese-app-api-service
+--network cheese-app-network dlops/cheese-app-api-service
 ```
 
 #### Run frontend
 Run the container using the following command
 ```
-sudo docker run -d --name frontend -p 3000:80 --network cheese-app dlops/cheese-app-frontend
+sudo docker run -d --name frontend -p 3000:80 --network cheese-app-network dlops/cheese-app-frontend
 ```
 
 #### Add NGINX config file
@@ -183,7 +183,7 @@ http {
 #### Run NGINX Web Server
 Run the container using the following command
 ```
-sudo docker run -d --name nginx -v $(pwd)/conf/nginx/nginx.conf:/etc/nginx/nginx.conf -p 80:80 --network cheese-app nginx:stable
+sudo docker run -d --name nginx -v $(pwd)/conf/nginx/nginx.conf:/etc/nginx/nginx.conf -p 80:80 --network cheese-app-network nginx:stable
 ```
 
 You can access the deployed API using `http://<Your VM IP Address>/`
