@@ -1,7 +1,7 @@
 # Use the official Debian-hosted Python image
-FROM python:3.9-slim-buster
+FROM python:3.12-slim-bookworm
 
-ARG DEBIAN_PACKAGES="build-essential git"
+ARG DEBIAN_PACKAGES="build-essential git screen vim"
 
 # Prevent apt from showing prompts
 ENV DEBIAN_FRONTEND=noninteractive
@@ -33,8 +33,6 @@ RUN set -ex; \
     chown app:app /persistent && \
     chown app:app /app
 
-# Expose port of API service
-EXPOSE 9000
 
 # Switch to the new user
 USER app
