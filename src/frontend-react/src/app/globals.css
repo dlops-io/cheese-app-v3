@@ -9,6 +9,7 @@
 
     body {
         @apply antialiased;
+        font-family: var(--font-source-sans-pro);
     }
 
     h1,
@@ -17,6 +18,27 @@
     h4,
     h5,
     h6 {
-        @apply font-playfair;
+        font-family: var(--font-playfair);
     }
+}
+
+@layer components {
+    .mobile-link {
+        @apply py-3 text-gray-800 border-b border-gray-200 last:border-b-0;
+    }
+}
+
+.layout-wrapper {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+main {
+    flex: 1;
+}
+
+body {
+    margin: 0;
+    padding: 0;
 }
