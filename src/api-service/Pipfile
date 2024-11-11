@@ -6,14 +6,18 @@ verify_ssl = true
 [dev-packages]
 
 [packages]
+user-agent = "*"
+requests = "*"
+google-cloud-storage = "*"
+google-generativeai = "*"
+google-cloud-aiplatform = "*"
+pandas = "*"
 uvicorn = "*"
 fastapi = "*"
-pandas = "*"
-google-cloud-storage = "*"
-tensorflow-hub = "*"
 python-multipart = "*"
-tensorflow-aarch64 = "==2.13.1"
-google-cloud-aiplatform = "*"
+pillow = "*"
+chromadb = "==0.5.7"
+tensorflow = "==2.17.0"
 
 [requires]
-python_version = "3.9"
+python_version = "3.12"
