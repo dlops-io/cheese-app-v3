@@ -35,6 +35,19 @@
       repository: gcr.io/{{ gcp_project }}/cheese-app-api-service:{{ tag.stdout}}
       push: yes
       source: local
+  - name: Build vector-db-cli container image
+    community.general.docker_image:
+      build:
+        path: /vector-db-cli
+        platform: linux/amd64/v2
+      name: gcr.io/{{ gcp_project }}/cheese-app-vector-db-cli:{{ tag.stdout}}
+      source: build
+  - name: Push vector-db-cli image to GCR
+    community.general.docker_image:
+      name: gcr.io/{{ gcp_project }}/cheese-app-vector-db-cli:{{ tag.stdout}}
+      repository: gcr.io/{{ gcp_project }}/cheese-app-vector-db-cli:{{ tag.stdout}}
+      push: yes
+      source: local
   - name: "Save docker tag"
     shell: echo {{ tag.stdout}} > .docker-tag
   - name: "Remove all unused containers"
