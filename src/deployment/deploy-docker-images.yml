@@ -38,7 +38,7 @@
   - name: Build vector-db-cli container image
     community.general.docker_image:
       build:
-        path: /vector-db-cli
+        path: /vector-db
         platform: linux/amd64/v2
       name: gcr.io/{{ gcp_project }}/cheese-app-vector-db-cli:{{ tag.stdout}}
       source: build
