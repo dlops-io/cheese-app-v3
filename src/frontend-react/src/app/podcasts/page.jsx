@@ -10,7 +10,6 @@ import DataService from "../../services/DataService";
 // Import the styles
 import styles from "./styles.module.css";
 
-
 export default function PodcastsPage() {
     // Component States
     const [episodes, setEpisodes] = useState([]);

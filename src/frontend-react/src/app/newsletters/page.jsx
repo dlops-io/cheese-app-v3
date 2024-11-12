@@ -13,6 +13,7 @@ import styles from "./styles.module.css";
 export default function NewslettersPage({ searchParams }) {
     const params = use(searchParams);
     const newsletter_id = params.id;
+
     // Component States
     const [newsletters, setNewsletters] = useState([]);
     const [hasActiveNewsletter, setHasActiveNewsletter] = useState(false);
