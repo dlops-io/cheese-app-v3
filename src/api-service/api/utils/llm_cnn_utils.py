@@ -99,6 +99,8 @@ def load_cnn_model():
     print("Loading CNN Model...")
     global cnn_model, data_details
 
+    os.makedirs(local_experiments_path, exist_ok=True)
+
     best_model_path = os.path.join(
         local_experiments_path,
         "experiments",

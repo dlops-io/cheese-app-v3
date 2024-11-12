@@ -95,7 +95,7 @@ class ChatHistoryManager:
         # Process messages to save images separately
         for message in chat_to_save["messages"]:
             if "image" in message and message["image"] is not None:
-                print("image:",message["image"])
+                #print("image:",message["image"])
                 # Save image and replace with path
                 image_path = self._save_image(
                     chat_to_save["chat_id"],
@@ -119,6 +119,7 @@ class ChatHistoryManager:
     def get_chat(self, chat_id: str, session_id: str) -> Optional[Dict]:
         """Get a specific chat by ID"""
         filepath = os.path.join(self.history_dir,session_id,f"{chat_id}.json")
+        chat_data = {}
         try:
             with open(filepath, 'r', encoding='utf-8') as f:
                 chat_data = json.load(f)        
