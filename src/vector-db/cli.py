@@ -6,6 +6,8 @@ import time
 import glob
 import hashlib
 import chromadb
+import requests
+import zipfile
 
 # Vertex AI
 import vertexai
@@ -421,8 +423,30 @@ def agent(method="char-split"):
 		print("LLM Response:", response)
 
 
+def download():
+	print("download()")
+
+	# Make dataset folders
+	os.makedirs(OUTPUT_FOLDER, exist_ok=True)
+
+	# Download from Github for easy access (This needs to be from you GCS bucket)
+	# # https://github.com/dlops-io/datasets/releases/download/v4.0/cheese-books-embeddings.zip
+	packet_url = "https://github.com/dlops-io/datasets/releases/download/v4.0/cheese-books-embeddings.zip"
+	packet_file = os.path.basename(packet_url)
+	with requests.get(packet_url, stream=True, headers=None) as r:
+		r.raise_for_status()
+		with open(os.path.join(OUTPUT_FOLDER, packet_file), "wb") as f:
+			for chunk in r.iter_content(chunk_size=8192):
+				f.write(chunk)
+	with zipfile.ZipFile(os.path.join(OUTPUT_FOLDER, packet_file)) as zfile:
+		zfile.extractall()
+
+
 def main(args=None):
 	print("CLI Arguments:", args)
+
+	if args.download: 
+		download()
 
 	if args.chunk:
 		chunk(method=args.chunk_type)
@@ -485,6 +509,11 @@ if __name__ == "__main__":
 		"--agent",
 		action="store_true",
 		help="Chat with LLM Agent",
+	)
+	parser.add_argument(
+		"--download",
+		action="store_true",
+		help="Download the embeddings",
 	)
 	parser.add_argument("--chunk_type", default="char-split", help="char-split | recursive-split | semantic-split")
 
