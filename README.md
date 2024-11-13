@@ -315,11 +315,14 @@ You can SSH into the server from the GCP console and see status of containers
 ```
 sudo docker container ls
 sudo docker container logs api-service -f
+sudo docker container logs frontend -f
+sudo docker container logs nginx -f
 ```
 
 To get into a container run:
 ```
 sudo docker exec -it api-service /bin/bash
+sudo docker exec -it nginx /bin/bash
 ```
 
 
