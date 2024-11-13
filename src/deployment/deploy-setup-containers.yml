@@ -45,7 +45,7 @@
         pull: yes
         restart: yes
         published_ports:
-          - 3000:80
+          - 3000:3000
         networks:
           - name: "{{docker_network_name}}"
 
@@ -55,6 +55,30 @@
         path: "/mnt/disk-1/persistent"
         state: "directory"
         mode: 0777
+    - name: Create chromadb directory
+      file:
+        path: "/mnt/disk-1/chromadb"
+        state: "directory"
+        mode: 0777
+
+    - name: Create vector-db container
+      docker_container:
+        name: "vector-db"
+        image: "chromadb/chroma:0.5.6"
+        state: started
+        recreate: yes
+        published_ports:
+          - 8000:8000
+        env:
+          IS_PERSISTENT: "TRUE"
+          ANONYMIZED_TELEMETRY: "FALSE"
+        networks:
+          - name: "{{docker_network_name}}"
+        volumes:
+          - /mnt/disk-1/chromadb:/chroma/chroma
+
+    - name: Load Vector DB
+      shell: docker run --rm -it -e GCP_PROJECT="{{ gcp_project }}" -e CHROMADB_HOST="vector-db" -e CHROMADB_PORT="8000" -e GOOGLE_APPLICATION_CREDENTIALS="/secrets/gcp-service.json" -v /srv/secrets:/secrets --network "{{docker_network_name}}" "gcr.io/{{ gcp_project }}/cheese-app-vector-db-cli:{{ tag.stdout}}" cli.py --download --load --chunk_type recursive-split
 
     - name: Create api-service container
       docker_container:
@@ -66,7 +90,10 @@
           - 9000:9000
         env:
           GOOGLE_APPLICATION_CREDENTIALS: "/secrets/gcp-service.json"
+          GCP_PROJECT: "{{ gcp_project }}"
           GCS_BUCKET_NAME: "cheese-app-models"
+          CHROMADB_HOST: "vector-db"
+          CHROMADB_PORT: "8000"
         networks:
           - name: "{{docker_network_name}}"
         volumes:
