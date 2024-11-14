@@ -73,10 +73,10 @@ sudo chmod -R 0777 conf
 ```
 
 #### Add secrets file
-* Create a file `bucket-reader.json` inside `secrets` folder with the secrets json provided [PP: WHICH ONE]
+* Create a file `gcp-service.json` inside `secrets` folder with the secrets json provided [PP: WHICH ONE] [SJ: This Key need Gemini access so we cannot give it out]
 * You can create a file using the echo command:
 ```
-echo '<___Provided Json Key___>' > secrets/bucket-reader.json
+echo '<___Json Key___>' > secrets/gcp-service.json
 ```
 
 
@@ -92,7 +92,7 @@ sudo docker run -d --name api-service \
 -v "$(pwd)/persistent-folder/":/persistent \
 -v "$(pwd)/secrets/":/secrets \
 -p 9000:9000 \
--e GOOGLE_APPLICATION_CREDENTIALS=/secrets/bucket-reader.json \
+-e GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-service.json \
 -e GCS_BUCKET_NAME=cheese-app-models \
 --network cheese-app-network dlops/cheese-app-api-service
 ```
@@ -104,7 +104,7 @@ sudo docker run --rm -ti --name api-service \
 -v "$(pwd)/persistent-folder/":/persistent \
 -v "$(pwd)/secrets/":/secrets \
 -p 9000:9000 \
--e GOOGLE_APPLICATION_CREDENTIALS=/secrets/bucket-reader.json \
+-e GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-service.json \
 -e GCP_PROJECT=ac215-project \
 -e GCP_PROJECT_ID=ac215-project \
 -e GCS_BUCKET_NAME=cheese-app-models \
@@ -115,7 +115,7 @@ sudo docker run --rm -ti --name api-service \
 #### Run frontend
 Run the container using the following command
 ```
-sudo docker run -d --name frontend -p 3000:80 --network cheese-app-network dlops/cheese-app-frontend
+sudo docker run -d --name frontend -p 3000:3000 --network cheese-app-network dlops/cheese-app-frontend
 ```
 
 #### Add NGINX config file
