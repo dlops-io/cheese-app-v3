@@ -73,7 +73,7 @@ sudo chmod -R 0777 conf
 ```
 
 #### Add secrets file
-* Create a file `bucket-reader.json` inside `secrets` folder with the secrets json provided
+* Create a file `bucket-reader.json` inside `secrets` folder with the secrets json provided [PP: WHICH ONE]
 * You can create a file using the echo command:
 ```
 echo '<___Provided Json Key___>' > secrets/bucket-reader.json
@@ -98,13 +98,15 @@ sudo docker run -d --name api-service \
 ```
 
 
-If you want to run in interactive mode like we id in development:
+If you want to run in interactive mode like we did in development:
 ```
 sudo docker run --rm -ti --name api-service \
 -v "$(pwd)/persistent-folder/":/persistent \
 -v "$(pwd)/secrets/":/secrets \
 -p 9000:9000 \
 -e GOOGLE_APPLICATION_CREDENTIALS=/secrets/bucket-reader.json \
+-e GCP_PROJECT=ac215-project \
+-e GCP_PROJECT_ID=ac215-project \
 -e GCS_BUCKET_NAME=cheese-app-models \
 -e DEV=1 \
 --network cheese-app-network dlops/cheese-app-api-service
@@ -167,7 +169,7 @@ http {
 		# Frontend
 		location / {
 			rewrite ^/(.*)$ /$1 break;
-			proxy_pass http://frontend;
+			proxy_pass http://frontend:3000;
 			proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 			proxy_set_header X-Forwarded-Proto $scheme;
 			proxy_set_header X-Real-IP $remote_addr;
