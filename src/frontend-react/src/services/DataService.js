@@ -41,13 +41,14 @@ const DataService = {
         return BASE_API_URL + "/newsletters/image/" + image_path;
     },
     GetChats: async function (model, limit) {
-        return await api.get("/" + model + "/chats/?limit=" + limit);
+        console.log("/" + model + "/chats/?limit=" + limit)
+        return await api.get("/" + model + "/chats?limit=" + limit);
     },
     GetChat: async function (model, chat_id) {
         return await api.get("/" + model + "/chats/" + chat_id);
     },
     StartChatWithLLM: async function (model, message) {
-        return await api.post("/" + model + "/chats/", message);
+        return await api.post("/" + model + "/chats", message);
     },
     ContinueChatWithLLM: async function (model, chat_id, message) {
         return await api.post("/" + model + "/chats/" + chat_id, message);
