@@ -233,6 +233,7 @@ Rather than each of installing different tools for deployment we will use Docker
 - Go into `docker-shell.sh` and change `GCP_PROJECT` to your project id
 - Run `sh docker-shell.sh` 
 
+
 - Check versions of tools:
 ```
 gcloud --version
@@ -248,6 +249,7 @@ Now you have a Docker container that connects to your GCP and can create VMs, de
 
 ### SSH Setup
 #### Configuring OS Login for service account
+Run this within the `deployment` container
 ```
 gcloud compute project-info add-metadata --project <YOUR GCP_PROJECT> --metadata enable-oslogin=TRUE
 ```
@@ -276,6 +278,7 @@ From the output of the above command keep note of the username. Here is a snippe
     operatingSystemType: LINUX
     primary: true
     uid: '3906553998'
+	...
     username: sa_100110341521630214262
 ```
 The username is `sa_100110341521630214262`
