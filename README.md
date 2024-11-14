@@ -230,8 +230,8 @@ Rather than each of installing different tools for deployment we will use Docker
 
 #### Run `deployment` container
 - cd into `deployment`
-- Go into `docker-shell.sh` or `docker-shell.bat` and change `GCP_PROJECT` to your project id
-- Run `sh docker-shell.sh` or `docker-shell.bat` for windows
+- Go into `docker-shell.sh` and change `GCP_PROJECT` to your project id
+- Run `sh docker-shell.sh` 
 
 - Check versions of tools:
 ```
