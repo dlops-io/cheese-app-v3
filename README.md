@@ -154,10 +154,10 @@ http {
 		location = /50x.html {
 			root   /usr/share/nginx/html;
 		}
-		# API
-		location /api {
-			rewrite ^/api/(.*)$ /$1 break;
-			proxy_pass http://api-service:9000;
+		# API 
+		location ^~ /api/ {
+			# Remove the rewrite since we want to preserve the full path after /api/
+			proxy_pass http://api-service:9000/;
 			proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 			proxy_set_header X-Forwarded-Proto $scheme;
 			proxy_set_header X-Real-IP $remote_addr;
@@ -165,10 +165,9 @@ http {
 			proxy_redirect off;
 			proxy_buffering off;
 		}
-
+		
 		# Frontend
 		location / {
-			rewrite ^/(.*)$ /$1 break;
 			proxy_pass http://frontend:3000;
 			proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 			proxy_set_header X-Forwarded-Proto $scheme;
