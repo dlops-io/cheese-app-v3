@@ -171,6 +171,44 @@
                   protocol: TCP
     when: cluster_state == "present"
 
+  - name: "Create Deployment for ChromaDB"
+    k8s:
+      state: present
+      definition:
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: vector-db
+          namespace: "{{cluster_name}}-namespace"
+        spec:
+          selector:
+            matchLabels:
+              run: vector-db
+          template:
+            metadata:
+              labels:
+                run: vector-db
+            spec:
+              containers:
+              - name: vector-db
+                image: chromadb/chroma:0.5.6
+                ports:
+                - containerPort: 8000
+                  protocol: TCP
+                env:
+                - name: IS_PERSISTENT
+                  value: "TRUE"
+                - name: ANONYMIZED_TELEMETRY
+                  value: "FALSE"
+                volumeMounts:
+                - name: chromadb-storage
+                  mountPath: /chroma/chroma
+              volumes:
+              - name: chromadb-storage
+                persistentVolumeClaim:
+                  claimName: chromadb-pvc
+    when: cluster_state == "present"
+
   - name: "Create Deployment for API Service"
     k8s:
       state: present
@@ -236,6 +274,25 @@
           type: NodePort
     when: cluster_state == "present"
 
+  - name: "Create Service for ChromaDB"
+    k8s:
+      state: present
+      definition:
+        apiVersion: v1
+        kind: Service
+        metadata:
+          name: vector-db
+          namespace: "{{cluster_name}}-namespace"
+        spec:
+          ports:
+          - port: 8000
+            protocol: TCP
+            targetPort: 8000
+          selector:
+            run: vector-db
+          type: ClusterIP
+    when: cluster_state == "present"
+    
   - name: "Create Service for API Service"
     k8s:
       state: present
