@@ -230,8 +230,6 @@
               volumes:
                 - name: persistent-vol
                   emptyDir: {}
-                  # persistentVolumeClaim:
-                  #   claimName: persistent-pvc
                 - name: google-cloud-key
                   secret:
                     secretName: gcp-service-key
@@ -245,7 +243,6 @@
                 volumeMounts:
                   - name: persistent-vol
                     mountPath: /persistent
-                    #readOnly: false
                   - name: google-cloud-key
                     mountPath: /secrets
                 env:
@@ -253,6 +250,12 @@
                     value: /secrets/gcp-service.json
                   - name: GCS_BUCKET_NAME
                     value: cheese-app-models
+                  - name: CHROMADB_HOST
+                    value: vector-db
+                  - name: CHROMADB_PORT
+                    value: "8000"
+                  - name: GCP_PROJECT
+                    value: "{{ gcp_project }}"
     when: cluster_state == "present"
 
   - name: "Create Service for Frontend"
