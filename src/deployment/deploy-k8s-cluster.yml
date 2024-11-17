@@ -175,7 +175,7 @@
     k8s:
       state: present
       definition:
-        apiVersion: apps/v1
+        apiVersion: v1
         kind: Deployment
         metadata:
           name: vector-db
@@ -200,13 +200,13 @@
                   value: "TRUE"
                 - name: ANONYMIZED_TELEMETRY
                   value: "FALSE"
-                volumeMounts:
-                - name: chromadb-storage
-                  mountPath: /chroma/chroma
-              volumes:
-              - name: chromadb-storage
-                persistentVolumeClaim:
-                  claimName: chromadb-pvc
+              #   volumeMounts:
+              #   - name: chromadb-storage
+              #     mountPath: /chroma/chroma
+              # volumes:
+              # - name: chromadb-storage
+              #   persistentVolumeClaim:
+              #     claimName: chromadb-pvc
     when: cluster_state == "present"
 
   - name: "Create Deployment for API Service"
@@ -293,7 +293,7 @@
             targetPort: 8000
           selector:
             run: vector-db
-          type: ClusterIP
+          type: NodePort
     when: cluster_state == "present"
 
   - name: "Create Job for Loading Vector DB"
