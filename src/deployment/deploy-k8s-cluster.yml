@@ -54,10 +54,6 @@
       service_account_file: "{{ gcp_service_account_file }}"
       state: "{{ cluster_state }}"
   
-  # - name: "Connect to cluster (update kubeconfig)"
-  #   shell: "gcloud container clusters get-credentials {{ cluster.name }} --zone {{ gcp_zone }} --project {{ gcp_project }}"
-  #   when: cluster_state == "present"
-  
   - name: "Connect to cluster (update kubeconfig)"
     shell: "gcloud container clusters get-credentials {{ cluster.name }} --zone {{ gcp_zone }} --project {{ gcp_project }}"
     when: cluster_state == "present"
@@ -116,6 +112,23 @@
           resources:
             requests:
               storage: 5Gi
+    when: cluster_state == "present"
+  
+  - name: "Create Persistent Volume Claim for ChromaDB"
+    k8s:
+      state: present
+      definition:
+        apiVersion: v1
+        kind: PersistentVolumeClaim
+        metadata:
+          name: chromadb-pvc
+          namespace: "{{cluster_name}}-namespace"
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 10Gi
     when: cluster_state == "present"
   
   - name: Importing credentials as a Secret
