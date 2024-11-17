@@ -380,6 +380,21 @@ ansible-playbook deploy-docker-images.yml -i inventory.yml
 ansible-playbook deploy-k8s-cluster.yml -i inventory.yml --extra-vars cluster_state=present
 ```
 
+Here is how the various services communicate between each other in the Kubernetes cluster.
+
+```mermaid
+graph LR
+    B[Browser] -->|http://nginx-ip.sslip.io/| I[Ingress Controller]
+    I -->|/| F[Frontend Service<br/>NodePort:3000]
+    I -->|/api/| A[API Service<br/>NodePort:9000]
+    A -->|vector-db:8000| V[Vector-DB Service<br/>NodePort:8000]
+
+    style I fill:#lightblue
+    style F fill:#lightgreen
+    style A fill:#lightgreen
+    style V fill:#lightgreen
+```
+
 ### Try some kubectl commands
 ```
 kubectl get all
