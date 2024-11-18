@@ -384,7 +384,7 @@ Here is how the various services communicate between each other in the Kubernete
 
 ```mermaid
 graph LR
-    B[Browser] -->|http://nginx-ip.sslip.io/| I[Ingress Controller]
+    B[Browser] -->|nginx-ip.sslip.io/| I[Ingress Controller]
     I -->|/| F[Frontend Service<br/>NodePort:3000]
     I -->|/api/| A[API Service<br/>NodePort:9000]
     A -->|vector-db:8000| V[Vector-DB Service<br/>NodePort:8000]
