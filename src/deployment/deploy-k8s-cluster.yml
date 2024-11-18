@@ -308,10 +308,21 @@
         spec:
           template:
             spec:
+              initContainers:
+              - name: wait-for-chromadb
+                image: busybox:1.28
+                command: ['sh', '-c', 
+                  'until wget --spider -S http://vector-db:8000/api/v1/heartbeat 2>&1 | grep "HTTP/1.1 200"; 
+                  do echo "Waiting for ChromaDB..."; sleep 5; done;']
               containers:
               - name: vector-db-loader
                 image: "gcr.io/{{ gcp_project }}/cheese-app-vector-db-cli:{{ tag.stdout}}"
-                command: ["python", "cli.py", "--download", "--load", "--chunk_type", "recursive-split"]
+                args:   
+                  - "cli.py"
+                  - "--download"
+                  - "--load"
+                  - "--chunk_type"
+                  - "recursive-split"
                 env:
                 - name: GCP_PROJECT
                   value: "{{ gcp_project }}"
