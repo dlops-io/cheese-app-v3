@@ -296,11 +296,24 @@
           type: NodePort
     when: cluster_state == "present"
 
+  - name: "Delete existing vector-db-loader job if it exists"
+    k8s:
+      state: absent
+      api_version: batch/v1
+      kind: Job
+      namespace: "{{cluster_name}}-namespace"
+      name: vector-db-loader
+    ignore_errors: yes
+
+  - name: "Wait for job deletion to complete"
+    shell: "kubectl wait --for=delete job/vector-db-loader -n {{cluster_name}}-namespace"
+    ignore_errors: yes
+
   - name: "Create Job for Loading Vector DB"
     k8s:
       state: present
       definition:
-        apiVersion: batch/v1
+        apiVersion: v1
         kind: Job
         metadata:
           name: vector-db-loader
@@ -317,12 +330,6 @@
               containers:
               - name: vector-db-loader
                 image: "gcr.io/{{ gcp_project }}/cheese-app-vector-db-cli:{{ tag.stdout}}"
-                args:   
-                  - "cli.py"
-                  - "--download"
-                  - "--load"
-                  - "--chunk_type"
-                  - "recursive-split"
                 env:
                 - name: GCP_PROJECT
                   value: "{{ gcp_project }}"
@@ -341,6 +348,22 @@
                   secretName: gcp-service-key
               restartPolicy: Never
           backoffLimit: 4
+    when: cluster_state == "present"
+
+  - name: "Wait for vector-db-loader job to complete"
+    shell: |
+      kubectl wait --for=condition=complete job/vector-db-loader -n {{cluster_name}}-namespace --timeout=600s
+    register: wait_job_result
+    retries: 3
+    delay: 10
+    until: wait_job_result.rc == 0
+    when: cluster_state == "present"
+
+  - name: "Verify vector-db-loader job succeeded"
+    shell: |
+      kubectl get job vector-db-loader -n {{cluster_name}}-namespace -o jsonpath='{.status.conditions[?(@.type=="Complete")].status}'
+    register: job_status
+    failed_when: job_status.stdout != "True"
     when: cluster_state == "present"
 
   - name: "Create Service for API Service"

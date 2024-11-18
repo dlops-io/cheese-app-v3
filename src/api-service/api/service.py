@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
 from api.routers import newsletter, podcast
 from api.routers import llm_chat, llm_cnn_chat
-#from api.routers import llm_rag_chat, llm_agent_chat
+from api.routers import llm_rag_chat, llm_agent_chat
 from api.routers import test_router
 
 # Setup FastAPI app
@@ -28,6 +28,6 @@ app.include_router(newsletter.router, prefix="/newsletters")
 app.include_router(podcast.router, prefix="/podcasts")
 app.include_router(llm_chat.router, prefix="/llm")
 app.include_router(llm_cnn_chat.router, prefix="/llm-cnn")
-# app.include_router(llm_rag_chat.router, prefix="/llm-rag")
-# app.include_router(llm_agent_chat.router, prefix="/llm-agent")
+app.include_router(llm_rag_chat.router, prefix="/llm-rag")
+app.include_router(llm_agent_chat.router, prefix="/llm-agent")
 app.include_router(test_router.router, prefix="/test")
