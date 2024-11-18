@@ -528,3 +528,45 @@ sudo docker exec -it nginx /bin/bash
 ```
 
 
+```
+# Check the init container logs:
+kubectl logs -n cheese-app-cluster-namespace job/vector-db-loader -c wait-for-chromadb
+
+# Check the main container logs:
+kubectl logs -n cheese-app-cluster-namespace job/vector-db-loader -c vector-db-loader
+
+# Check the job status:
+kubectl describe job vector-db-loader -n cheese-app-cluster-namespace
+
+
+
+# First, find the pod name for your job
+kubectl get pods -n cheese-app-cluster-namespace | grep vector-db-loader
+
+# Then get the logs from that pod (replace <pod-name> with the actual name)
+kubectl logs -n cheese-app-cluster-namespace <pod-name>
+kubectl logs -n cheese-app-cluster-namespace vector-db-loader-9gr5m
+
+# If you want to see logs from the init container specifically
+kubectl logs -n cheese-app-cluster-namespace <pod-name> -c wait-for-chromadb
+kubectl logs -n cheese-app-cluster-namespace vector-db-loader-wlfdx -c wait-for-chromadb
+
+# If you want to see logs from the main container
+kubectl logs -n cheese-app-cluster-namespace <pod-name> -c vector-db-loader
+kubectl logs -n cheese-app-cluster-namespace vector-db-loader-wlfdx -c vector-db-loader
+
+# You can also get logs directly from the job (this will show logs from the most recent pod)
+kubectl logs job/vector-db-loader -n cheese-app-cluster-namespace
+
+# To see previous logs if the pod has restarted
+kubectl logs job/vector-db-loader -n cheese-app-cluster-namespace --previous
+
+
+# View logs from the current API pod
+kubectl logs deployment/api -n cheese-app-cluster-namespace
+
+# Follow the logs
+kubectl logs deployment/api -n cheese-app-cluster-namespace -f
+```
+
+

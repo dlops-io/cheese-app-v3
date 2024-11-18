@@ -304,10 +304,12 @@
       namespace: "{{cluster_name}}-namespace"
       name: vector-db-loader
     ignore_errors: yes
+    when: cluster_state == "present"
 
   - name: "Wait for job deletion to complete"
     shell: "kubectl wait --for=delete job/vector-db-loader -n {{cluster_name}}-namespace"
     ignore_errors: yes
+    when: cluster_state == "present"
 
   - name: "Create Job for Loading Vector DB"
     k8s:
