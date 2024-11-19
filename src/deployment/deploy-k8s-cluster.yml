@@ -357,7 +357,7 @@
       kubectl wait --for=condition=complete job/vector-db-loader -n {{cluster_name}}-namespace --timeout=600s
     register: wait_job_result
     retries: 3
-    delay: 10
+    delay: 60
     until: wait_job_result.rc == 0
     when: cluster_state == "present"
 
