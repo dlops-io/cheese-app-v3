@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Send, CameraAltOutlined } from '@mui/icons-material';
 import IconButton from '@mui/material/IconButton';
+import imageCompression from 'browser-image-compression';
 
 // Styles
 import styles from './ChatInput.module.css';
@@ -49,7 +50,6 @@ export default function ChatInput({
         }
     };
     const handleSubmit = () => {
-
         if (message.trim() || selectedImage) {
             console.log('Submitting message:', message);
             const newMessage = {
@@ -74,22 +74,46 @@ export default function ChatInput({
     const handleImageClick = () => {
         fileInputRef.current?.click();
     };
-    const handleImageChange = (e) => {
+    const handleImageChange = async (e) => {
         const file = e.target.files?.[0];
-        if (file) {
-            if (file.size > 5000000) { // 5MB limit
-                alert('File size should be less than 5MB');
-                return;
-            }
+        // if (file) {
+        //     if (file.size > 5000000) { // 5MB limit
+        //         alert('File size should be less than 5MB');
+        //         return;
+        //     }
 
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                setSelectedImage({
-                    file: file,
-                    preview: reader.result
-                });
-            };
-            reader.readAsDataURL(file);
+        //     const reader = new FileReader();
+        //     reader.onloadend = () => {
+        //         setSelectedImage({
+        //             file: file,
+        //             preview: reader.result
+        //         });
+        //     };
+        //     reader.readAsDataURL(file);
+        // }
+        if (file) {
+            try {
+                const options = {
+                    maxSizeMB: 0.25,
+                    maxWidthOrHeight: 512,
+                    useWebWorker: true
+                };
+
+                const compressedFile = await imageCompression(file, options);
+                const reader = new FileReader();
+
+                reader.onloadend = () => {
+                    setSelectedImage({
+                        file: compressedFile,
+                        preview: reader.result
+                    });
+                };
+
+                reader.readAsDataURL(compressedFile);
+            } catch (error) {
+                console.error('Compression error:', error);
+                setError(error);
+            }
         }
     };
     const handleModelChange = (event) => {
@@ -156,7 +180,9 @@ export default function ChatInput({
                     </IconButton>
                 </div>
                 <div className={styles.rightControls}>
-                    <span className={styles.inputTip}>Use shift + return for new line</span>
+                    <span className="text-gray-400 text-sm hidden sm:inline">
+                        Use shift + return for new line
+                    </span>
                     <select
                         className={styles.modelSelect}
                         value={selectedModel}

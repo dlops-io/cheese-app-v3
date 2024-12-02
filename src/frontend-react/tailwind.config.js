@@ -11,6 +11,9 @@ module.exports = {
                 montserrat: ['Montserrat', 'sans-serif'],
                 playfair: ['Playfair Display', 'serif'],
             },
+            colors: {
+                'chat-bg': '#363636',
+            },
         },
     },
     plugins: [

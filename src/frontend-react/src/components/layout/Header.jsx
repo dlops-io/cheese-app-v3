@@ -1,10 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
-import { Home, Info, Podcasts, Email, SmartToy, ChatBubbleOutline } from '@mui/icons-material';
-import styles from './Header.module.css';
+import { usePathname } from 'next/navigation';
+import { Home, Info, Podcasts, Email, SmartToy } from '@mui/icons-material';
 
 const navItems = [
     { name: 'Home', path: '/', sectionId: '', icon: <Home fontSize="small" /> },
@@ -16,135 +15,87 @@ const navItems = [
 
 export default function Header() {
     const pathname = usePathname();
-    const router = useRouter();
     const [isScrolled, setIsScrolled] = useState(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-
     useEffect(() => {
-        if (window) {
-            const handleScroll = () => {
-                setIsScrolled(window.scrollY > 50)
-            }
-
-            window.addEventListener('scroll', handleScroll)
-            return () => window.removeEventListener('scroll', handleScroll)
-        }
-
+        const handleScroll = () => {
+            setIsScrolled(window.scrollY > 50);
+        };
+        window.addEventListener('scroll', handleScroll);
+        return () => window.removeEventListener('scroll', handleScroll);
     }, []);
-    useEffect(() => {
-        if (window) {
-            if (pathname === '/' && window.location.hash) {
-                const element = document.getElementById(window.location.hash.slice(1));
-                if (element) {
-                    setTimeout(() => {
-                        element.scrollIntoView({ behavior: 'smooth' });
-                    }, 100);
-                }
-            }
+
+    const buildHref = (item) => {
+        if (pathname === "/" && item.sectionId) {
+            return `#${item.sectionId}`;
         }
-    }, [pathname]);
+        return item.path + (item.sectionId ? `#${item.sectionId}` : '');
+    };
 
-    // Handlers
-    function buildHref(item) {
-
-        let href = item.path;
-        if ((pathname === "/") && (item.sectionId != '')) {
-            href = `#${item.sectionId}`;
-        } else {
-            if ((item.path === "/") && (item.sectionId != '')) {
-                href = item.path + `#${item.sectionId}`;
-            } else {
-                href = item.path;
-            }
-        }
-
-        return href;
-    }
+    const handleMobileMenuClick = () => {
+        setIsMobileMenuOpen(!isMobileMenuOpen);
+    };
 
     return (
-        <header
-            className={`fixed w-full top-0 z-50 transition-all duration-300 ${isScrolled ? 'bg-black/90' : 'bg-transparent'
-                }`}
-        >
-            <div className="container mx-auto px-4 h-20 flex items-center justify-between">
-                <Link href="/" className="text-white hover:text-white/90 transition-colors">
-                    <h1 className="text-2xl font-bold font-montserrat">🧀 Formaggio</h1>
-                </Link>
-
-                {/* Desktop Navigation */}
-                {/* <nav className="hidden md:flex gap-8">
+        <header className={`fixed w-full top-0 z-50 transition-all duration-300 ${isScrolled ? 'bg-black/90' : 'bg-transparent'
+            }`}>
+            <div className="container mx-auto px-4">
+                <div className="flex items-center justify-between h-16">
+                    {/* Logo */}
                     <Link href="/" className="text-white hover:text-white/90 transition-colors">
-                        Home
+                        <h1 className="text-xl md:text-2xl font-bold font-montserrat">🧀 Formaggio</h1>
                     </Link>
-                    <Link href="#about" className="text-white hover:text-white/90 transition-colors">
-                        About
-                    </Link>
-                    <Link href="#podcasts" className="text-white hover:text-white/90 transition-colors">
-                        Podcasts
-                    </Link>
-                    <Link href="#newsletters" className="text-white hover:text-white/90 transition-colors">
-                        Newsletters
-                    </Link>
-                </nav> */}
 
+                    {/* Desktop Navigation */}
+                    <nav className="hidden md:flex items-center space-x-8">
+                        {navItems.map((item) => (
+                            <Link
+                                key={item.name}
+                                href={buildHref(item)}
+                                className={`flex items-center space-x-2 text-white opacity-80 hover:opacity-100 transition-opacity ${pathname === item.path ? 'opacity-100' : ''
+                                    }`}
+                            >
+                                <span>{item.icon}</span>
+                                <span className="text-sm">{item.name}</span>
+                            </Link>
+                        ))}
+                    </nav>
 
-                <div className={styles.navLinks}>
-                    {navItems.map((item) => (
-                        <Link
-                            key={item.name}
-                            href={buildHref(item)}
-                            className={`${styles.navLink} ${pathname === item.path ? styles.active : ''}`}
-                        >
-                            <span className={styles.icon}>{item.icon}</span>
-                            <span className={styles.linkText}>{item.name}</span>
-                        </Link>
-                    ))}
+                    {/* Mobile Menu Button */}
+                    <button
+                        className="md:hidden p-2 text-white"
+                        onClick={handleMobileMenuClick}
+                        aria-label="Toggle menu"
+                    >
+                        <div className="w-6 space-y-1">
+                            <span className={`block w-6 h-0.5 bg-white transition-all duration-300 ${isMobileMenuOpen ? 'rotate-45 translate-y-1.5' : ''
+                                }`} />
+                            <span className={`block w-6 h-0.5 bg-white transition-all duration-300 ${isMobileMenuOpen ? 'opacity-0' : ''
+                                }`} />
+                            <span className={`block w-6 h-0.5 bg-white transition-all duration-300 ${isMobileMenuOpen ? '-rotate-45 -translate-y-1.5' : ''
+                                }`} />
+                        </div>
+                    </button>
                 </div>
 
-                {/* Mobile Menu Button */}
-                <button
-                    className="md:hidden p-2"
-                    onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                    aria-label="Toggle mobile menu"
-                >
-                    <div className={`w-6 h-0.5 bg-white mb-1.5 transition-all ${isMobileMenuOpen ? 'rotate-45 translate-y-2' : ''}`} />
-                    <div className={`w-6 h-0.5 bg-white mb-1.5 ${isMobileMenuOpen ? 'opacity-0' : ''}`} />
-                    <div className={`w-6 h-0.5 bg-white transition-all ${isMobileMenuOpen ? '-rotate-45 -translate-y-2' : ''}`} />
-                </button>
-
                 {/* Mobile Menu */}
-                <div
-                    className={`
-                        fixed md:hidden top-20 left-0 w-full bg-white shadow-lg transform transition-transform duration-300
-                        ${isMobileMenuOpen ? 'translate-y-0' : '-translate-y-full'}
-                    `}
-                >
-                    <nav className="flex flex-col p-4">
-                        <Link
-                            href="/"
-                            className="py-3 text-gray-800 border-b border-gray-200"
-                            onClick={() => setIsMobileMenuOpen(false)}
-                        >
-                            Home
-                        </Link>
-                        <Link
-                            href="#about"
-                            className="py-3 text-gray-800 border-b border-gray-200"
-                            onClick={() => setIsMobileMenuOpen(false)}
-                        >
-                            About
-                        </Link>
-                        <Link
-                            href="#podcasts"
-                            className="py-3 text-gray-800"
-                            onClick={() => setIsMobileMenuOpen(false)}
-                        >
-                            Podcasts
-                        </Link>
+                <div className={`md:hidden ${isMobileMenuOpen ? 'block' : 'hidden'}`}>
+                    <nav className="absolute left-0 right-0 bg-black/95 mt-2 py-4 px-4 space-y-2">
+                        {navItems.map((item) => (
+                            <Link
+                                key={item.name}
+                                href={buildHref(item)}
+                                className="flex items-center space-x-4 text-white py-3 opacity-80 hover:opacity-100 transition-opacity"
+                                onClick={() => setIsMobileMenuOpen(false)}
+                            >
+                                <span>{item.icon}</span>
+                                <span>{item.name}</span>
+                            </Link>
+                        ))}
                     </nav>
                 </div>
             </div>
         </header>
-    )
+    );
 }

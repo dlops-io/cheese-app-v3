@@ -1,6 +1,5 @@
 /* Sidebar */
 .sidebar {
-    width: 300px;
     background: #363636;
     border-right: 1px solid #444;
     display: flex;
@@ -19,6 +18,7 @@
 .sidebarHeader h2 {
     font-size: 18px;
     font-weight: normal;
+    color: white;
 }
 
 .newChatButton {
