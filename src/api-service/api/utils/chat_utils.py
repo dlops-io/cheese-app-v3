@@ -7,12 +7,14 @@ import glob
 import base64
 import traceback
 import io
+
+persistent_dir = "/persistent"
         
 class ChatHistoryManager:
     def __init__(self, model, history_dir: str = "chat-history"):
         """Initialize the chat history manager with the specified directory"""
         self.model = model
-        self.history_dir = os.path.join(history_dir, model)
+        self.history_dir = os.path.join(persistent_dir, history_dir, model)
         self.images_dir = os.path.join(self.history_dir, "images")
         self._ensure_directories()
     
