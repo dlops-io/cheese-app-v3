@@ -172,7 +172,8 @@ export default function ChatInput({
                         type="file"
                         ref={fileInputRef}
                         className={styles.hiddenFileInput}
-                        accept="image/*"
+                        accept="image/*;capture=camera"
+                        capture="environment"
                         onChange={handleImageChange}
                     />
                     <IconButton aria-label="camera" className={styles.iconButton} onClick={handleImageClick}>
