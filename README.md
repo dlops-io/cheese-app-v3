@@ -232,7 +232,7 @@ Search for each of these in the GCP search bar and click enable to enable these 
 
 ### Setup Docker Container (Ansible, Docker, Kubernetes)
 
-Rather than each of installing different tools for deployment we will use Docker to build and run a standard container will all required software.
+Rather than each of you installing different tools for deployment we will use Docker to build and run a standard container will all required software.
 
 #### Run `deployment` container
 - cd into `deployment`
