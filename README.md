@@ -94,6 +94,9 @@ sudo docker run -d --name api-service \
 -p 9000:9000 \
 -e GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-service.json \
 -e GCS_BUCKET_NAME=cheese-app-models \
+-e GCP_PROJECT=ac215-project \
+-e CHROMADB_HOST=cheese-app-vector-db \
+-e CHROMADB_PORT=8000 \
 --network cheese-app-network dlops/cheese-app-api-service
 ```
 
@@ -107,6 +110,8 @@ sudo docker run --rm -ti --name api-service \
 -e GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-service.json \
 -e GCP_PROJECT=ac215-project \
 -e GCP_PROJECT_ID=ac215-project \
+-e CHROMADB_HOST=cheese-app-vector-db \
+-e CHROMADB_PORT=8000 \
 -e GCS_BUCKET_NAME=cheese-app-models \
 -e DEV=1 \
 --network cheese-app-network dlops/cheese-app-api-service
