@@ -297,7 +297,7 @@ The username is `sa_100110341521630214262`
 
 ### Deployment
 
-#### Build and Push Docker Containers to GCR (Google Container Registry)
+#### Build and Push Docker Containers to Google Artifact Registry
 ```
 ansible-playbook deploy-docker-images.yml -i inventory.yml
 ```

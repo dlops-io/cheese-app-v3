@@ -36,6 +36,7 @@
     - name: Print tag
       debug:
         var: tag
+    
     - name: Create frontend container
       docker_container:
         name: "frontend"

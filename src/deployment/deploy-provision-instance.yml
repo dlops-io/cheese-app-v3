@@ -35,6 +35,7 @@
     
     - name: "Wait for unattended upgrade to finish if running"
       raw: "systemd-run --property=\"After=apt-daily.service apt-daily-upgrade.service\" --wait /bin/true"
+    
     - name: Update apt catalog
       apt:
         update_cache: "yes"
