@@ -10,16 +10,20 @@ echo "UV version: $(uv --version)"
 gcloud auth activate-service-account --key-file $GOOGLE_APPLICATION_CREDENTIALS
 gcloud config set project $GCP_PROJECT
 
-# # Activate virtual environment
-# echo "Activating virtual environment..."
-# source /home/app/.venv/bin/activate
+# Check if the bucket exists
+if ! gsutil ls -b $PULUMI_BUCKET >/dev/null 2>&1; then
+    echo "Bucket does not exist. Creating..."
+    gsutil mb -p $GCP_PROJECT $PULUMI_BUCKET
+else
+    echo "Bucket already exists. Skipping creation."
+fi
 
-# # Authenticate gcloud using service account
-# gcloud auth activate-service-account --key-file $GOOGLE_APPLICATION_CREDENTIALS
-# # Set GCP Project Details
-# gcloud config set project $GCP_PROJECT
-# # Configure GCR
-# gcloud auth configure-docker gcr.io -q
+echo "Logging into Pulumi using GCS bucket: $PULUMI_BUCKET"
+pulumi login $PULUMI_BUCKET
+
+# List available stacks
+echo "Available Pulumi stacks in GCS:"
+gsutil ls $PULUMI_BUCKET/.pulumi/stacks/  || echo "No stacks found."
 
 # Run Bash for interactive mode
 /bin/bash
