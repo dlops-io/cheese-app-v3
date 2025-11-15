@@ -7,9 +7,13 @@
 export IMAGE_NAME="cheese-app-deployment"
 export BASE_DIR=$(pwd)
 export SECRETS_DIR=$(pwd)/../../../secrets/
+export SSH_DIR=$(pwd)/../../../secrets/
 export GCP_PROJECT="ac215-project" # Change to your GCP Project
 export GCP_ZONE="us-central1-a"
 export GOOGLE_APPLICATION_CREDENTIALS=/secrets/deployment.json
+
+# Create local Pulumi plugins directory if it doesn't exist
+mkdir -p $BASE_DIR/pulumi-plugins
 
 # Build the image based on the Dockerfile
 #docker build -t $IMAGE_NAME -f Dockerfile .
@@ -20,7 +24,9 @@ docker run --rm --name $IMAGE_NAME -ti \
 -v /var/run/docker.sock:/var/run/docker.sock \
 -v "$BASE_DIR":/app \
 -v "$SECRETS_DIR":/secrets \
--v "$HOME/.ssh":/home/app/.ssh \
+-v "$SSH_DIR/.ssh":/home/app/.ssh:ro \
+-v "$(pwd)/docker_config.json":"/root/.docker/config.json" \
+-v "$(pwd)/pulumi-plugins":/root/.pulumi/plugins \
 -v "$BASE_DIR/../api-service":/api-service \
 -v "$BASE_DIR/../frontend-react":/frontend-react \
 -v "$BASE_DIR/../vector-db":/vector-db \
