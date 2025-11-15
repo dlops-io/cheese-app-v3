@@ -1,19 +1,23 @@
 #!/bin/bash
 
 echo "Container is running!!!"
+echo "Architecture: $(uname -m)"
 
-# args="$@"
-# echo $args
+echo "Environment ready! Virtual environment activated."
+echo "Python version: $(python --version)"
+echo "UV version: $(uv --version)"
 
-# if [[ -z ${args} ]]; 
-# then
-#     pipenv shell
-# else
-#   pipenv run python $args
-# fi
+# Activate virtual environment
+echo "Activating virtual environment..."
+source /.venv/bin/activate
 
-if [ "${DEV}" = 1 ]; then
-  pipenv shell
+args="$@"
+echo $args
+
+if [[ -z ${args} ]]; 
+then
+    # Keep a shell open
+    exec /bin/bash
 else
-  pipenv run python cli.py --download --load --chunk_type recursive-split
+  uv run python $args
 fi

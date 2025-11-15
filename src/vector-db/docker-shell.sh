@@ -5,7 +5,7 @@ set -e
 
 # Set vairables
 export BASE_DIR=$(pwd)
-export SECRETS_DIR=$(pwd)/../secrets/
+export SECRETS_DIR=$(pwd)/../../../secrets/
 export GCP_PROJECT="ac215-project" # CHANGE TO YOUR PROJECT ID
 export GOOGLE_APPLICATION_CREDENTIALS="/secrets/llm-service-account.json"
 export IMAGE_NAME="cheese-app-vector-db-cli"
