@@ -7,24 +7,27 @@ from PIL import Image
 from pathlib import Path
 import traceback
 import chromadb
-from vertexai.language_models import TextEmbeddingInput, TextEmbeddingModel
-from vertexai.generative_models import GenerativeModel, ChatSession, Part
+
+# Vertex AI
+from google import genai
+from google.genai import types
+from google.genai.types import Content, Part, GenerationConfig, ToolConfig
+from google.genai import errors
+from google.genai.chats import Chat
 
 # Setup
 GCP_PROJECT = os.environ["GCP_PROJECT"]
 GCP_LOCATION = "us-central1"
 EMBEDDING_MODEL = "text-embedding-004"
 EMBEDDING_DIMENSION = 256
-GENERATIVE_MODEL = "gemini-1.5-flash-002"
+GENERATIVE_MODEL = "gemini-2.0-flash-001"
 CHROMADB_HOST = os.environ["CHROMADB_HOST"]
 CHROMADB_PORT = os.environ["CHROMADB_PORT"]
 
-# Configuration settings for the content generation
-generation_config = {
-    "max_output_tokens": 3000,  # Maximum number of tokens for output
-    "temperature": 0.1,  # Control randomness in output
-    "top_p": 0.95,  # Use nucleus sampling
-}
+#############################################################################
+#                       Initialize the LLM Client                           #
+llm_client = genai.Client(vertexai=True, project=GCP_PROJECT, location=GCP_LOCATION)
+#############################################################################
 
 # Initialize the GenerativeModel with specific system instructions
 SYSTEM_INSTRUCTION = """
@@ -46,15 +49,9 @@ Remember:
 
 Your goal is to provide accurate, helpful information about cheese based solely on the content of the text chunks you receive with each query.
 """
-generative_model = GenerativeModel(
-	GENERATIVE_MODEL,
-	system_instruction=[SYSTEM_INSTRUCTION]
-)
-# https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/text-embeddings-api#python
-embedding_model = TextEmbeddingModel.from_pretrained(EMBEDDING_MODEL)
 
 # Initialize chat sessions
-chat_sessions: Dict[str, ChatSession] = {}
+chat_sessions: Dict[str, Chat] = {}
 
 # Connect to chroma DB
 client = chromadb.HttpClient(host=CHROMADB_HOST, port=CHROMADB_PORT)
@@ -64,16 +61,22 @@ collection_name = f"{method}-collection"
 #collection = client.get_collection(name=collection_name)
 
 def generate_query_embedding(query):
-	query_embedding_inputs = [TextEmbeddingInput(task_type='RETRIEVAL_DOCUMENT', text=query)]
-	kwargs = dict(output_dimensionality=EMBEDDING_DIMENSION) if EMBEDDING_DIMENSION else {}
-	embeddings = embedding_model.get_embeddings(query_embedding_inputs, **kwargs)
-	return embeddings[0].values
+    kwargs = {
+        "output_dimensionality": EMBEDDING_DIMENSION
+    }
+    response = llm_client.models.embed_content(
+        model=EMBEDDING_MODEL,
+        contents=query,
+        config=types.EmbedContentConfig(**kwargs)
+    )
+    return response.embeddings[0].values
 
-def create_chat_session() -> ChatSession:
+def create_chat_session(past_history=None) -> Chat:
     """Create a new chat session with the model"""
-    return generative_model.start_chat()
+    # Create a new chat session
+    return llm_client.chats.create(model=GENERATIVE_MODEL, history=past_history)
 
-def generate_chat_response(chat_session: ChatSession, message: Dict) -> str:
+def generate_chat_response(chat_session: Chat, message: Dict) -> str:
     """
     Generate a response using the chat session to maintain history.
     Handles both text and image inputs.
@@ -166,10 +169,7 @@ def generate_chat_response(chat_session: ChatSession, message: Dict) -> str:
             raise ValueError("Message must contain either text content or image")
 
         # Send message with all parts to the model
-        response = chat_session.send_message(
-            message_parts,
-            generation_config=generation_config
-        )
+        response = chat_session.send_message(message_parts)
         
         return response.text
         
@@ -181,12 +181,21 @@ def generate_chat_response(chat_session: ChatSession, message: Dict) -> str:
             detail=f"Failed to generate response: {str(e)}"
         )
 
-def rebuild_chat_session(chat_history: List[Dict]) -> ChatSession:
+def rebuild_chat_session(chat_history: List[Dict]) -> Chat:
     """Rebuild a chat session with complete context"""
-    new_session = create_chat_session()
-    
+
+    formatted_history = []
     for message in chat_history:
         if message["role"] == "user":
-            generate_chat_response(new_session, message)
-    
+            formatted_history.append(
+                types.UserContent(parts=[types.Part.from_text(text=message["content"])])
+            )
+        elif message["role"] == "assistant":
+            formatted_history.append(
+                types.ModelContent(
+                    parts=[types.Part.from_text(text=message["content"])]
+                )
+            )
+
+    new_session = create_chat_session(formatted_history)
     return new_session
