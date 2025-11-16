@@ -51,3 +51,22 @@ frontend_image = docker_build.Image(
 )
 pulumi.export("cheese-app-frontend-react-ref", frontend_image.ref)
 pulumi.export("cheese-app-frontend-react-tags", frontend_image.tags)
+
+# Docker Build + Push -> vector-db-cli
+image_config = {
+    "image_name": "cheese-app-vector-db-cli",
+    "context_path": "../../vector-db",
+    "dockerfile": "Dockerfile"
+}
+frontend_image = docker_build.Image(
+    f"build-{image_config["image_name"]}",
+    tags=[pulumi.Output.concat(registry_url, "/", image_config["image_name"], ":", timestamp_tag)],
+    context=docker_build.BuildContextArgs(location=image_config["context_path"]),
+    dockerfile={"location": f"{image_config["context_path"]}/{image_config["dockerfile"]}"},
+    platforms=[docker_build.Platform.LINUX_AMD64],
+    push=True,
+    opts=pulumi.ResourceOptions(custom_timeouts=CustomTimeouts(create="30m"),
+                                retain_on_delete=True)
+)
+pulumi.export("cheese-app-vector-db-cli-ref", frontend_image.ref)
+pulumi.export("cheese-app-vector-db-cli-tags", frontend_image.tags)

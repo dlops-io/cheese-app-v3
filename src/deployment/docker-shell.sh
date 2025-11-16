@@ -10,6 +10,7 @@ export SECRETS_DIR=$(pwd)/../../../secrets/
 export SSH_DIR=$(pwd)/../../../secrets/
 export GCP_PROJECT="ac215-project" # Change to your GCP Project
 export GCP_REGION="us-central1"
+export GCP_ZONE="us-central1-a"
 export GOOGLE_APPLICATION_CREDENTIALS=/secrets/deployment.json
 export PULUMI_BUCKET="gs://$GCP_PROJECT-pulumi-state-bucket"
 
@@ -42,6 +43,7 @@ else
     -e USE_GKE_GCLOUD_AUTH_PLUGIN=True \
     -e GCP_PROJECT=$GCP_PROJECT \
     -e GCP_REGION=$GCP_REGION \
+    -e GCP_ZONE=$GCP_ZONE \
     -e PULUMI_BUCKET=$PULUMI_BUCKET \
     $IMAGE_NAME
 fi
