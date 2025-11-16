@@ -110,7 +110,7 @@ def generate_chat_response(chat_session: Chat, message: Dict) -> str:
                 image_bytes = base64.b64decode(base64_data)
                 
                 # Create an image Part using FileData
-                image_part = Part.from_data(image_bytes, mime_type=mime_type)
+                image_part = Part.from_bytes(data=image_bytes, mime_type=mime_type)
                 message_parts.append(image_part)
 
                 # Add text content if present
@@ -140,7 +140,7 @@ def generate_chat_response(chat_session: Chat, message: Dict) -> str:
             }.get(Path(image_path).suffix.lower(), 'image/jpeg')
 
             # Create an image Part using FileData
-            image_part = Part.from_data(image_bytes, mime_type=mime_type)
+            image_part = Part.from_bytes(data=image_bytes, mime_type=mime_type)
             message_parts.append(image_part)
 
             # Add text content if present

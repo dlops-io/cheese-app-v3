@@ -448,6 +448,9 @@ deploy_api_service = remote.Command(
 
 # Setup Nginx Webserver
 
+# Shared asset for nginx config
+nginx_conf_asset = pulumi.FileAsset("../nginx-conf/nginx/nginx.conf")
+
 # Create nginx config directory
 create_nginx_conf_dir = remote.Command(
     "create-nginx-conf-directory",
@@ -463,8 +466,9 @@ create_nginx_conf_dir = remote.Command(
 upload_nginx_conf = remote.CopyToRemote(
     "upload-nginx-conf",
     connection=connection,
-    source=pulumi.FileAsset("../nginx-conf/nginx/nginx.conf"),
+    source=nginx_conf_asset,
     remote_path="/tmp/nginx.conf",
+    triggers=[nginx_conf_asset],
     opts=ResourceOptions(depends_on=[create_nginx_conf_dir]),
 )
 
@@ -477,6 +481,7 @@ move_nginx_conf = remote.Command(
         sudo chmod 0644 /conf/nginx/nginx.conf
         sudo chown root:root /conf/nginx/nginx.conf
     """,
+    triggers=[nginx_conf_asset],
     opts=ResourceOptions(depends_on=[upload_nginx_conf]),
 )
 
@@ -497,6 +502,7 @@ deploy_nginx = remote.Command(
             --restart always \
             nginx:stable
     """,
+    triggers=[nginx_conf_asset],
     opts=ResourceOptions(depends_on=[move_nginx_conf]),
 )
 
@@ -507,8 +513,10 @@ restart_nginx = remote.Command(
     create="""
         sudo docker container restart nginx
     """,
+    triggers=[nginx_conf_asset],
     opts=ResourceOptions(depends_on=[deploy_nginx, upload_nginx_conf]),
 )
+
 
 # Export references to stack
 pulumi.export("instance_name", instance.name)
