@@ -396,12 +396,12 @@ Search for each of these in the GCP search bar and click enable to enable these 
 * Compute Engine API
 * Service Usage API
 * Cloud Resource Manager API
-* Google Container Registry API
+* Artifact Registry API
 * Kubernetes Engine API
 
 ### Start Deployment Docker Container
 -  `cd deployment`
-- Run `sh docker-shell.sh` or `docker-shell.bat` for windows
+- Run `sh docker-shell.sh`
 - Check versions of tools
 `gcloud --version`
 `kubectl version`
@@ -412,13 +412,22 @@ Search for each of these in the GCP search bar and click enable to enable these 
 
 ### Build and Push Docker Containers to GCR
 **This step is only required if you have NOT already done this**
+- cd into `deploy_images`
+- When setting up pulumi for the first time run:
 ```
-ansible-playbook deploy-docker-images.yml -i inventory.yml
+pulumi stack init dev
+pulumi config set gcp:project ac215-project
+```
+This will save all your deployment states to a GCP bucket
+
+- If a stack has already been setup, you can preview deployment using:
+```
+pulumi preview --stack dev
 ```
 
-### Create & Deploy Cluster
+- To build & push images run (This will take a while since we need to build 3 containers):
 ```
-ansible-playbook deploy-k8s-cluster.yml -i inventory.yml --extra-vars cluster_state=present
+pulumi up --stack dev -y
 ```
 
 Here is how the various services communicate between each other in the Kubernetes cluster.
@@ -427,7 +436,7 @@ Here is how the various services communicate between each other in the Kubernete
 graph LR
     B[Browser] -->|nginx-ip.sslip.io/| I[Ingress Controller]
     I -->|/| F[Frontend Service<br/>NodePort:3000]
-    I -->|/api/| A[API Service<br/>NodePort:9000]
+    I -->|/api-service/| A[API Service<br/>NodePort:9000]
     A -->|vector-db:8000| V[Vector-DB Service<br/>NodePort:8000]
 
     style I fill:#lightblue
