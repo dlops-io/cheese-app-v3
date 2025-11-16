@@ -285,7 +285,7 @@ configure_docker = remote.Command(
         sudo systemctl start docker
         sudo systemctl enable docker
 
-        # Fix docker socket permissions
+        # Docker socket permissions
         sudo chmod 666 /var/run/docker.sock
     """,
     opts=ResourceOptions(depends_on=[install_pip_packages]),
@@ -338,7 +338,7 @@ create_network = remote.Command(
     "create-docker-network",
     connection=connection,
     create="""
-        sudo docker network create appnetwork || true
+        docker network create appnetwork || true
     """,
     opts=ResourceOptions(depends_on=[move_secrets]),
 )
@@ -363,10 +363,10 @@ deploy_frontend = remote.Command(
     connection=connection,
     create=frontend_tag.apply(
         lambda tags: f"""
-            sudo docker pull {tags[0]}
-            sudo docker stop frontend || true
-            sudo docker rm frontend || true
-            sudo docker run -d \
+            docker pull {tags[0]}
+            docker stop frontend || true
+            docker rm frontend || true
+            docker run -d \
                 --name frontend \
                 --network appnetwork \
                 -p 3000:3000 \
@@ -382,10 +382,10 @@ deploy_vector_db = remote.Command(
     "deploy-vector-db-container",
     connection=connection,
     create="""
-        sudo docker pull chromadb/chroma:latest
-        sudo docker stop vector-db || true
-        sudo docker rm vector-db || true
-        sudo docker run -d \
+        docker pull chromadb/chroma:latest
+        docker stop vector-db || true
+        docker rm vector-db || true
+        docker run -d \
             --name vector-db \
             --network appnetwork \
             -p 8000:8000 \
@@ -404,8 +404,8 @@ load_vector_db = remote.Command(
     connection=connection,
     create=vector_db_cli_tag.apply(
         lambda tags: f"""
-            sudo docker pull {tags[0]}
-            sudo docker run --rm \
+            docker pull {tags[0]}
+            docker run --rm \
                 -e GCP_PROJECT="{project}" \
                 -e CHROMADB_HOST="vector-db" \
                 -e CHROMADB_PORT="8000" \
@@ -425,10 +425,10 @@ deploy_api_service = remote.Command(
     connection=connection,
     create=api_service_tag.apply(
         lambda tags: f"""
-            sudo docker pull {tags[0]}
-            sudo docker stop api-service || true
-            sudo docker rm api-service || true
-            sudo docker run -d \
+            docker pull {tags[0]}
+            docker stop api-service || true
+            docker rm api-service || true
+            docker run -d \
                 --name api-service \
                 --network appnetwork \
                 -p 9000:9000 \
@@ -490,10 +490,10 @@ deploy_nginx = remote.Command(
     "deploy-nginx-container",
     connection=connection,
     create="""
-        sudo docker pull nginx:stable
-        sudo docker stop nginx || true
-        sudo docker rm nginx || true
-        sudo docker run -d \
+        docker pull nginx:stable
+        docker stop nginx || true
+        docker rm nginx || true
+        docker run -d \
             --name nginx \
             --network appnetwork \
             -p 80:80 \
@@ -511,7 +511,7 @@ restart_nginx = remote.Command(
     "restart-nginx-container",
     connection=connection,
     create="""
-        sudo docker container restart nginx
+        docker container restart nginx
     """,
     triggers=[nginx_conf_asset],
     opts=ResourceOptions(depends_on=[deploy_nginx, upload_nginx_conf]),
