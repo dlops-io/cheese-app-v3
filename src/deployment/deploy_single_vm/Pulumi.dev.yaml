@@ -1,3 +1,5 @@
 encryptionsalt: v1:IZWgPAUSenU=:v1:EonfOV2T3bGtnvFQ:bz+W6LVent/cOZrFG9KdiO/VzortYw==
 config:
   gcp:project: ac215-project
+  security:ssh_user: sa_100110341521630214262
+  security:gcp_service_account_email: deployment@ac215-project.iam.gserviceaccount.com

@@ -336,12 +336,12 @@ This will save all your deployment states to a GCP bucket
 
 - If a stack has already been setup, you can preview deployment using:
 ```
-pulumi preview --stack dev
+pulumi preview --stack dev --refresh
 ```
 
 - To build & push images run (This will take a while since we need to build 3 containers):
 ```
-pulumi up --stack dev -y
+pulumi up --stack dev --refresh -y
 ```
 
 #### Create Compute Instance (VM) & Deploy Containers
@@ -351,17 +351,19 @@ We will use Pulumi to automate this deployment
 ```
 pulumi stack init dev
 pulumi config set gcp:project ac215-project
+pulumi config set gcp:ssh_user sa_100110341521630214262
+pulumi config set gcp:gcp_service_account_email deployment@ac215-project.iam.gserviceaccount.com
 ```
 This will save all your deployment states to a GCP bucket
 
 - If a stack has already been setup, you can preview deployment using:
 ```
-pulumi preview --stack dev
+pulumi preview --stack dev --refresh
 ```
 
 - To create a VM and deploy all our container images run:
 ```
-pulumi up --stack dev -y
+pulumi up --stack dev --refresh -y
 ```
 
 Once the command runs go to `http://<instance_ip>/` that is displayed in your terminal
@@ -384,7 +386,7 @@ sudo docker exec -it nginx /bin/bash
 
 ## **Delete the Compute Instance / Persistent disk**
 ```
-pulumi destroy --stack dev -y
+pulumi destroy --stack dev --refresh -y
 ```
 
 ## Deployment with Scaling using Kubernetes
@@ -428,6 +430,25 @@ pulumi preview --stack dev
 - To build & push images run (This will take a while since we need to build 3 containers):
 ```
 pulumi up --stack dev -y
+```
+
+## Create & Deploy Cluster
+- cd into `deploy_k8s` from the `deployment` folder
+- When setting up pulumi for the first time run:
+```
+pulumi stack init dev
+pulumi config set gcp:project ac215-project
+```
+This will save all your deployment states to a GCP bucket
+
+- If a stack has already been setup, you can preview deployment using:
+```
+pulumi preview --stack dev --refresh
+```
+
+- To create a VM and deploy all our container images run:
+```
+pulumi up --stack dev --refresh -y
 ```
 
 Here is how the various services communicate between each other in the Kubernetes cluster.
@@ -477,7 +498,7 @@ ansible-playbook deploy-k8s-cluster.yml -i inventory.yml --extra-vars cluster_st
 ---
 
 
-## Create Kubernetes Cluster Tutorial 
+## Create Simple Kubernetes Cluster Tutorial 
 
 ### API's to enable in GCP for Project
 We have already done this in the deployment tutorial but in case you have not done that step. Search for each of these in the GCP search bar and click enable to enable these API's

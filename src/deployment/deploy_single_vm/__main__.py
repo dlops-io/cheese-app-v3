@@ -7,10 +7,12 @@ from pulumi_command import remote
 # Get project info and configuration
 gcp_config = pulumi.Config("gcp")
 project = gcp_config.require("project")
+ssh_user = pulumi.Config("security").require("ssh_user")
+gcp_service_account_email = pulumi.Config("security").require(
+    "gcp_service_account_email"
+)
 location = os.environ["GCP_REGION"]
 zone = os.environ["GCP_ZONE"]
-ssh_user = "sa_100110341521630214262"
-gcp_service_account_email = "deployment@ac215-project.iam.gserviceaccount.com"
 
 # Configuration variables
 persistent_disk_name = "cheese-app-demo-disk"
@@ -18,12 +20,6 @@ persistent_disk_size = 50
 machine_instance_name = "cheese-app-demo"
 machine_type = "n2d-standard-2"
 machine_disk_size = 50
-
-# Deployment control flags - allows running in chunks for debugging
-# config = pulumi.Config()
-# create_infrastructure = config.get_bool("createInfrastructure") or True
-# provision_vm = config.get_bool("provisionVM") or True
-# install_docker = config.get_bool("installDocker") or True
 
 
 def load_ssh_key_pair():
