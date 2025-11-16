@@ -30,6 +30,7 @@ api_service_image = docker_build.Image(
     opts=pulumi.ResourceOptions(custom_timeouts=CustomTimeouts(create="30m"),
                                 retain_on_delete=True)
 )
+# Export references to stack
 pulumi.export("cheese-app-api-service-ref", api_service_image.ref)
 pulumi.export("cheese-app-api-service-tags", api_service_image.tags)
 
@@ -68,5 +69,6 @@ frontend_image = docker_build.Image(
     opts=pulumi.ResourceOptions(custom_timeouts=CustomTimeouts(create="30m"),
                                 retain_on_delete=True)
 )
+# Export references to stack
 pulumi.export("cheese-app-vector-db-cli-ref", frontend_image.ref)
 pulumi.export("cheese-app-vector-db-cli-tags", frontend_image.tags)
