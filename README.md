@@ -7,7 +7,9 @@ In this section we will deploy the Cheese App to GCP. For this we will create a 
 * frontend-react
 
 
-### Ensure you have all your container build and works locally
+### Ensure you have all your container built and works locally
+#### vector-db
+* ChromaDB is up and running
 #### api-service
 * Go to `http://localhost:9000/docs` and make sure you can see the API Docs
 #### frontend-react
@@ -21,24 +23,16 @@ In this section we will deploy the Cheese App to GCP. For this we will create a 
 
 #### Build, Tag & Push api-service
 * Inside the folder `api-service`, make sure you are not in the docker shell
-* Build and Tag the Docker Image: `docker build -t <USER NAME>/cheese-app-api-service -f Dockerfile .`
-* If you are on M1/2 Macs: Build and Tag the Docker Image: `docker build -t <USER NAME>/cheese-app-api-service --platform=linux/amd64/v2 -f Dockerfile .`
-* Push to Docker Hub: `docker push <USER NAME>/cheese-app-api-service`
+* Run: `sh docker-hub.sh`
 
 #### Build, Tag & Push frontend-react
 * We need to rebuild the frontend as we are building th react app for production release. So we use the `Dockerfile` instead of the `Docker.dev` file
 * Inside the folder`frontend-react`, make sure you are not in the docker shell
-* Build and Tag the Docker Image: `docker build -t  <USER NAME>/cheese-app-frontend -f Dockerfile .`
-* Push to Docker Hub: `docker push <USER NAME>/cheese-app-frontend`
+* Run: `sh docker-hub.sh`
 
-Docker Build, Tag & Push commands should look like this:
-```
-docker build -t dlops/cheese-app-api-service --platform=linux/amd64/v2 -f Dockerfile .
-docker push dlops/cheese-app-api-service
-
-docker build -t dlops/cheese-app-frontend --platform=linux/amd64/v2 -f Dockerfile .
-docker push dlops/cheese-app-frontend
-```
+#### Build, Tag & Push vector-db-cli
+* Inside the folder `vector-db`, make sure you are not in the docker shell
+* Run: `sh docker-hub.sh`
 
 ### Running Docker Containers on VM
 
@@ -46,8 +40,9 @@ docker push dlops/cheese-app-frontend
 * Create a VM Instance from [GCP](https://console.cloud.google.com/compute/instances)
 * When creating the VM, you can select all the default values but ensure to select:
 	- Machine Type: N2D
-	- Allow HTTP traffic
-	- Allow HTTPS traffic
+    - Under OS & Storage: Select disk size as 50 Gig
+	- Under Networking: Allow HTTP traffic, Allow HTTPS traffic
+    
 * SSH into your newly created instance
 Install Docker on the newly created instance by running
 * `curl -fsSL https://get.docker.com -o get-docker.sh`
@@ -85,6 +80,38 @@ echo '<___Json Key___>' > secrets/gcp-service.json
 sudo docker network create cheese-app-network
 ```
 
+#### Run vector-db
+Run the container using the following command
+```
+sudo docker pull chromadb/chroma:latest
+sudo docker stop cheese-app-vector-db || true
+sudo docker rm cheese-app-vector-db || true
+sudo docker run -d \
+    --name cheese-app-vector-db \
+    --network cheese-app-network \
+    -p 8000:8000 \
+    -e IS_PERSISTENT=TRUE \
+    -e ANONYMIZED_TELEMETRY=FALSE \
+    -v ./docker-volumes/chromadb:/chroma/chroma \
+    --restart always \
+    chromadb/chroma
+```
+
+#### Run vector-db-cli
+Run the container using the following command
+```
+sudo docker pull dlops/cheese-app-vector-db-cli
+sudo docker run --rm \
+    -e GCP_PROJECT=ac215-project \
+    -e CHROMADB_HOST=cheese-app-vector-db \
+    -e CHROMADB_PORT=8000 \
+    -e GOOGLE_APPLICATION_CREDENTIALS="/secrets/gcp-service.json" \
+    -v "$(pwd)/secrets/":/secrets \
+    --network cheese-app-network \
+    dlops/cheese-app-vector-db-cli \
+    cli.py --download --load --chunk_type recursive-split
+```
+
 #### Run api-service
 Run the container using the following command
 ```
@@ -120,7 +147,7 @@ sudo docker run --rm -ti --name api-service \
 #### Run frontend
 Run the container using the following command
 ```
-sudo docker run -d --name frontend -p 3000:3000 --network cheese-app-network dlops/cheese-app-frontend
+sudo docker run -d --name frontend -p 3000:3000 --network cheese-app-network dlops/cheese-app-frontend-react
 ```
 
 #### Add NGINX config file
@@ -160,8 +187,8 @@ http {
 			root   /usr/share/nginx/html;
 		}
 		# API 
-		location ^~ /api/ {
-			# Remove the rewrite since we want to preserve the full path after /api/
+		location ^~ /api-service/ {
+			# Remove the rewrite since we want to preserve the full path after /api-service/
 			proxy_pass http://api-service:9000/;
 			proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 			proxy_set_header X-Forwarded-Proto $scheme;
@@ -195,16 +222,16 @@ sudo docker run -d --name nginx -v $(pwd)/conf/nginx/nginx.conf:/etc/nginx/nginx
 You can access the deployed API using `http://<Your VM IP Address>/`
 
 
-## Deployment to GCP
+## Deployment to GCP (Single VM Instance)
 
-In this section we will deploy the Cheese App to GCP using Ansible Playbooks. We will automate all the deployment steps we did previously.
+In this section we will deploy the Cheese App to GCP using Pulumi. We will automate all the deployment steps we did previously.
 
 ### API's to enable in GCP before you begin
 Search for each of these in the GCP search bar and click enable to enable these API's
 * Compute Engine API
 * Service Usage API
 * Cloud Resource Manager API
-* Google Container Registry API
+* Artifact Registry API
 
 #### Setup GCP Service Account for deployment
 - Here are the step to create a service account:
@@ -213,7 +240,7 @@ Search for each of these in the GCP search bar and click enable to enable these 
 - For `deployment`:
     - Compute Admin
     - Compute OS Login
-    - Container Registry Service Agent
+    - Artifact Registry Administrator
     - Kubernetes Engine Admin
     - Service Account User
     - Storage Admin
@@ -225,12 +252,13 @@ Search for each of these in the GCP search bar and click enable to enable these 
 - For `gcp-service` give the following roles:
     - Storage Object Viewer
     - Vertex AI Administrator
+    - Artifact Registry Reader
 - Then click done.
 - This will create a service account
 - On the right "Actions" column click the vertical ... and select "Create key". A prompt for Create private key for "gcp-service" will appear select "JSON" and click create. This will download a Private key json file to your computer. Copy this json file into the **secrets** folder.
 - Rename the json key file to `gcp-service.json`
 
-### Setup Docker Container (Ansible, Docker, Kubernetes)
+### Setup Docker Container (Pulumi, Docker, Kubernetes)
 
 Rather than each of you installing different tools for deployment we will use Docker to build and run a standard container will all required software.
 
@@ -239,11 +267,10 @@ Rather than each of you installing different tools for deployment we will use Do
 - Go into `docker-shell.sh` and change `GCP_PROJECT` to your project id
 - Run `sh docker-shell.sh` 
 
-
 - Check versions of tools:
 ```
 gcloud --version
-ansible --version
+pulumi version
 kubectl version --client
 ```
 
@@ -251,7 +278,6 @@ kubectl version --client
 - Run `gcloud auth list`
 
 Now you have a Docker container that connects to your GCP and can create VMs, deploy containers all from the command line
-
 
 ### SSH Setup
 #### Configuring OS Login for service account
@@ -271,7 +297,7 @@ ssh-keygen -f ssh-key-deployment
 cd /app
 ```
 
-### Providing public SSH keys to instances
+#### Providing public SSH keys to instances
 ```
 gcloud compute os-login ssh-keys add --key-file=/secrets/ssh-key-deployment.pub
 ```
@@ -289,37 +315,56 @@ From the output of the above command keep note of the username. Here is a snippe
 ```
 The username is `sa_100110341521630214262`
 
-### Deployment Setup
-* Add ansible user details in inventory.yml file
+#### Deployment Setup
+* 
+* Add ssh user details in inventory.yml file
 * GCP project details in inventory.yml file
 * GCP Compute instance details in inventory.yml file
 
 
-### Deployment
+### Deployment (Single VM Instance)
 
 #### Build and Push Docker Containers to Google Artifact Registry
+We will use Pulumi to build & push container images
+- cd into `deploy_images`
+- When setting up pulumi for the first time run:
 ```
-ansible-playbook deploy-docker-images.yml -i inventory.yml
+pulumi stack init dev
+pulumi config set gcp:project ac215-project
+```
+This will save all your deployment states to a GCP bucket
+
+- If a stack has already been setup, you can preview deployment using:
+```
+pulumi preview --stack dev
 ```
 
-#### Create Compute Instance (VM) Server in GCP
+- To build & push images run (This will take a while since we need to build 3 containers):
 ```
-ansible-playbook deploy-create-instance.yml -i inventory.yml --extra-vars cluster_state=present
-```
-
-Once the command runs successfully get the IP address of the compute instance from GCP Console and update the appserver>hosts in inventory.yml file
-
-#### Provision Compute Instance in GCP
-Install and setup all the required things for deployment.
-```
-ansible-playbook deploy-provision-instance.yml -i inventory.yml
+pulumi up --stack dev -y
 ```
 
-#### Setup Docker Containers in the  Compute Instance
+#### Create Compute Instance (VM) & Deploy Containers
+We will use Pulumi to automate this deployment
+- cd into `deploy_single_vm` from the `deployment` folder
+- When setting up pulumi for the first time run:
 ```
-ansible-playbook deploy-setup-containers.yml -i inventory.yml
+pulumi stack init dev
+pulumi config set gcp:project ac215-project
+```
+This will save all your deployment states to a GCP bucket
+
+- If a stack has already been setup, you can preview deployment using:
+```
+pulumi preview --stack dev
 ```
 
+- To create a VM and deploy all our container images run:
+```
+pulumi up --stack dev -y
+```
+
+Once the command runs go to `http://<instance_ip>/` that is displayed in your terminal
 
 You can SSH into the server from the GCP console and see status of containers
 ```
@@ -337,20 +382,10 @@ sudo docker exec -it nginx /bin/bash
 
 
 
-#### Configure Nginx file for Web Server
-* Create nginx.conf file for defaults routes in web server
-
-#### Setup Webserver on the Compute Instance
-```
-ansible-playbook deploy-setup-webserver.yml -i inventory.yml
-```
-Once the command runs go to `http://<External IP>/` 
-
 ## **Delete the Compute Instance / Persistent disk**
 ```
-ansible-playbook deploy-create-instance.yml -i inventory.yml --extra-vars cluster_state=absent
+pulumi destroy --stack dev -y
 ```
-
 
 ## Deployment with Scaling using Kubernetes
 
