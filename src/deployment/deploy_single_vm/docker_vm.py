@@ -52,7 +52,7 @@ firewall_http = gcp.compute.Firewall(
         )
     ],
     source_ranges=["0.0.0.0/0"],
-    target_tags=["http-server"],
+    target_tags=["http-server-pulumi"],
 )
 
 # Create firewall rule for HTTPS traffic
@@ -66,7 +66,7 @@ firewall_https = gcp.compute.Firewall(
         )
     ],
     source_ranges=["0.0.0.0/0"],
-    target_tags=["https-server"],
+    target_tags=["https-server-pulumi"],
 )
 
 # Create firewall rule for SSH
@@ -392,12 +392,12 @@ docker_provider = docker.Provider(
         "UserKnownHostsFile=/dev/null",
     ],
     # Authentication for Google Container Registry / Artifact Registry
-    # registry_auth=[
-    #     {
-    #         "address": "gcr.io",
-    #         "config_file": "~/.docker/config.json",
-    #     }
-    # ],
+    registry_auth=[
+        {
+            "address": "us-docker.pkg.dev",
+            # "config_file": "~/.docker/config.json",
+        }
+    ],
     opts=ResourceOptions(depends_on=[install_docker, give_docker_access]),
 )
 
@@ -439,7 +439,7 @@ deploy_frontend_container = docker.Container(
 
 deploy_vector_db_container = docker.Container(
     "vector-db-container",
-    image=vector_db_cli_tag.apply(lambda tags: tags[0]),
+    image="chromadb/chroma:latest",
     name="vector-db",
     restart="always",
     # Map container port to host port
