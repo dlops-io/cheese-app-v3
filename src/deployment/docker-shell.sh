@@ -36,7 +36,7 @@ else
     -v "$BASE_DIR":/app \
     -v "$SECRETS_DIR":/secrets \
     -v "$SSH_DIR/.ssh":/home/app/.ssh:ro \
-    -v "$(pwd)/docker_config.json":"/root/.docker/config.json" \
+    -v "$(pwd)/docker_config.json":/root/.docker/config.json \
     -v "$(pwd)/pulumi-plugins":/root/.pulumi/plugins \
     -v "$BASE_DIR/../api-service":/api-service \
     -v "$BASE_DIR/../frontend-react":/frontend-react \

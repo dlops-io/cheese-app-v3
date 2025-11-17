@@ -351,8 +351,8 @@ We will use Pulumi to automate this deployment
 ```
 pulumi stack init dev
 pulumi config set gcp:project ac215-project
-pulumi config set gcp:ssh_user sa_100110341521630214262
-pulumi config set gcp:gcp_service_account_email deployment@ac215-project.iam.gserviceaccount.com
+pulumi config set security:ssh_user sa_100110341521630214262
+pulumi config set security:gcp_service_account_email deployment@ac215-project.iam.gserviceaccount.com
 ```
 This will save all your deployment states to a GCP bucket
 

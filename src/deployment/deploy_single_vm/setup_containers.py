@@ -1,9 +1,10 @@
 import pulumi
 from pulumi import ResourceOptions
 from pulumi_command import remote
+import pulumi_docker as docker
 
 
-def setup_containers(connection, configure_docker, project):
+def setup_containers(connection, configure_docker, project, instance_ip, ssh_user):
     """
     Setup and deploy all application containers:
     - Copy GCP secrets to the VM
@@ -61,16 +62,6 @@ def setup_containers(connection, configure_docker, project):
         opts=ResourceOptions(depends_on=[upload_service_account]),
     )
 
-    # Create Docker network
-    create_network = remote.Command(
-        "create-docker-network",
-        connection=connection,
-        create="""
-            docker network create appnetwork || true
-        """,
-        opts=ResourceOptions(depends_on=[move_secrets]),
-    )
-
     # Create directories on persistent disk
     create_dirs = remote.Command(
         "create-persistent-directories",
@@ -81,97 +72,178 @@ def setup_containers(connection, configure_docker, project):
             sudo chmod 0777 /mnt/disk-1/persistent
             sudo chmod 0777 /mnt/disk-1/chromadb
         """,
-        opts=ResourceOptions(depends_on=[create_network]),
+        opts=ResourceOptions(depends_on=[move_secrets]),
+    )
+
+    # Set up Docker provider with SSH credentials for remote access
+    docker_provider = docker.Provider(
+        "docker-provider",
+        host=instance_ip.apply(lambda ip: f"ssh://{ssh_user}@{ip}"),
+        # SSH options to handle key-based authentication and suppress host checking
+        ssh_opts=[
+            "-i",
+            "/secrets/ssh-key-deployment",
+            "-o",
+            "StrictHostKeyChecking=no",
+            "-o",
+            "UserKnownHostsFile=/dev/null",
+        ],
+        # Authentication for Google Container Registry / Artifact Registry
+        registry_auth=[
+            {
+                "address": "us-docker.pkg.dev",
+            }
+        ],
+        opts=ResourceOptions(depends_on=[create_dirs]),
+    )
+
+    # Create Docker network
+    docker_network = docker.Network(
+        "docker-network",
+        name="appnetwork",
+        driver="bridge",
+        opts=ResourceOptions(provider=docker_provider),
     )
 
     # Deploy containers
     # Frontend
-    deploy_frontend = remote.Command(
+    deploy_frontend = docker.Container(
         "deploy-frontend-container",
-        connection=connection,
-        create=frontend_tag.apply(
-            lambda tags: f"""
-                docker pull {tags[0]}
-                docker stop frontend || true
-                docker rm frontend || true
-                docker run -d \
-                    --name frontend \
-                    --network appnetwork \
-                    -p 3000:3000 \
-                    --restart always \
-                    {tags[0]}
-            """
+        image=frontend_tag.apply(lambda tags: tags[0]),
+        name="frontend",
+        ports=[
+            docker.ContainerPortArgs(
+                internal=3000,  # Container port
+                external=3000,  # Host port
+            )
+        ],
+        networks_advanced=[
+            docker.ContainerNetworksAdvancedArgs(
+                name=docker_network.name,
+            ),
+        ],
+        opts=ResourceOptions(
+            provider=docker_provider,
+            depends_on=[docker_network, create_dirs],
         ),
-        opts=ResourceOptions(depends_on=[create_dirs]),
     )
 
     # Vector DB
-    deploy_vector_db = remote.Command(
+    deploy_vector_db = docker.Container(
         "deploy-vector-db-container",
-        connection=connection,
-        create="""
-            docker pull chromadb/chroma:latest
-            docker stop vector-db || true
-            docker rm vector-db || true
-            docker run -d \
-                --name vector-db \
-                --network appnetwork \
-                -p 8000:8000 \
-                -e IS_PERSISTENT=TRUE \
-                -e ANONYMIZED_TELEMETRY=FALSE \
-                -v /mnt/disk-1/chromadb:/chroma/chroma \
-                --restart always \
-                chromadb/chroma
-        """,
-        opts=ResourceOptions(depends_on=[create_dirs]),
+        image="chromadb/chroma:latest",
+        name="vector-db",
+        restart="always",
+        # Map container port to host port
+        ports=[
+            docker.ContainerPortArgs(
+                internal=8000,  # Container port
+                external=8000,  # Host port
+            )
+        ],
+        # Environment variables for the container
+        envs=[
+            "IS_PERSISTENT=TRUE",
+            "ANONYMIZED_TELEMETRY=FALSE",
+        ],
+        # Mount persistent volume for ChromaDB data
+        volumes=[
+            docker.ContainerVolumeArgs(
+                host_path="/mnt/disk-1/chromadb",
+                container_path="/chroma/chroma",
+                read_only=False,
+            )
+        ],
+        # Connect to the app network for inter-container communication
+        networks_advanced=[
+            docker.ContainerNetworksAdvancedArgs(
+                name=docker_network.name,
+            ),
+        ],
+        opts=ResourceOptions(
+            provider=docker_provider,
+            depends_on=[docker_network],
+        ),
     )
 
     # Load vector DB data
-    load_vector_db = remote.Command(
+    load_vector_db = docker.Container(
         "load-vector-db-data",
-        connection=connection,
-        create=vector_db_cli_tag.apply(
-            lambda tags: f"""
-                docker pull {tags[0]}
-                docker run --rm \
-                    -e GCP_PROJECT="{project}" \
-                    -e CHROMADB_HOST="vector-db" \
-                    -e CHROMADB_PORT="8000" \
-                    -e GOOGLE_APPLICATION_CREDENTIALS="/secrets/gcp-service.json" \
-                    -v /srv/secrets:/secrets \
-                    --network appnetwork \
-                    {tags[0]} \
-                    cli.py --download --load --chunk_type recursive-split
-            """
+        image=vector_db_cli_tag.apply(lambda tags: tags[0]),
+        name="vector-db-loader",
+        rm=True,
+        restart="no",
+        envs=[
+            f"GCP_PROJECT={project}",
+            "CHROMADB_HOST=vector-db",
+            "CHROMADB_PORT=8000",
+            "GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-service.json",
+        ],
+        volumes=[
+            docker.ContainerVolumeArgs(
+                host_path="/srv/secrets",
+                container_path="/secrets",
+                read_only=False,
+            )
+        ],
+        networks_advanced=[
+            docker.ContainerNetworksAdvancedArgs(
+                name=docker_network.name,
+            )
+        ],
+        command=[
+            "cli.py",
+            "--download",
+            "--load",
+            "--chunk_type",
+            "recursive-split",
+        ],
+        opts=ResourceOptions(
+            provider=docker_provider,
+            depends_on=[deploy_vector_db],
         ),
-        opts=ResourceOptions(depends_on=[deploy_vector_db]),
     )
 
     # API Service
-    deploy_api_service = remote.Command(
+    deploy_api_service = docker.Container(
         "deploy-api-service-container",
-        connection=connection,
-        create=api_service_tag.apply(
-            lambda tags: f"""
-                docker pull {tags[0]}
-                docker stop api-service || true
-                docker rm api-service || true
-                docker run -d \
-                    --name api-service \
-                    --network appnetwork \
-                    -p 9000:9000 \
-                    -e GOOGLE_APPLICATION_CREDENTIALS="/secrets/gcp-service.json" \
-                    -e GCP_PROJECT="{project}" \
-                    -e GCS_BUCKET_NAME="cheese-app-models" \
-                    -e CHROMADB_HOST="vector-db" \
-                    -e CHROMADB_PORT="8000" \
-                    -v /mnt/disk-1/persistent:/persistent \
-                    -v /srv/secrets:/secrets \
-                    --restart always \
-                    {tags[0]}
-            """
+        image=api_service_tag.apply(lambda tags: tags[0]),
+        name="api-service",
+        restart="always",
+        ports=[
+            docker.ContainerPortArgs(
+                internal=9000,
+                external=9000,
+            )
+        ],
+        envs=[
+            "GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-service.json",
+            f"GCP_PROJECT={project}",
+            "GCS_BUCKET_NAME=cheese-app-models",
+            "CHROMADB_HOST=vector-db",
+            "CHROMADB_PORT=8000",
+        ],
+        volumes=[
+            docker.ContainerVolumeArgs(
+                host_path="/mnt/disk-1/persistent",
+                container_path="/persistent",
+                read_only=False,
+            ),
+            docker.ContainerVolumeArgs(
+                host_path="/srv/secrets",
+                container_path="/secrets",
+                read_only=False,
+            ),
+        ],
+        networks_advanced=[
+            docker.ContainerNetworksAdvancedArgs(
+                name=docker_network.name,
+            )
+        ],
+        opts=ResourceOptions(
+            provider=docker_provider,
+            depends_on=[load_vector_db],
         ),
-        opts=ResourceOptions(depends_on=[load_vector_db]),
     )
 
-    return deploy_api_service
+    return docker_provider, docker_network

@@ -18,10 +18,12 @@ instance, instance_ip, connection, persistent_disk, network = create_instance()
 configure_docker = provision_instance(connection, instance, ssh_user)
 
 # Setup and deploy all application containers
-deploy_api_service = setup_containers(connection, configure_docker, project)
+docker_provider, docker_network = setup_containers(
+    connection, configure_docker, project, instance_ip, ssh_user
+)
 
 # Setup and deploy Nginx webserver
-restart_nginx = setup_webserver(connection, deploy_api_service)
+restart_nginx = setup_webserver(connection, docker_provider, docker_network)
 
 # Export references to stack
 pulumi.export("instance_name", instance.name)

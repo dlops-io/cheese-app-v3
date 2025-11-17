@@ -2,7 +2,6 @@ import hashlib
 import pulumi
 from pulumi import ResourceOptions
 from pulumi_command import remote
-import pulumi_docker as docker
 
 
 def file_checksum(path: str) -> str:
@@ -19,13 +18,20 @@ def file_checksum(path: str) -> str:
         return hashlib.sha256(f.read()).hexdigest()
 
 
-def setup_webserver(connection, docker_provider, docker_network):
+def setup_webserver(connection, deploy_api_service):
     """
     Setup and deploy Nginx webserver:
     - Create nginx configuration directory
     - Upload nginx configuration file with checksum tracking
     - Deploy nginx container
     - Restart nginx to ensure configuration is loaded
+
+    Args:
+        connection: SSH connection configuration
+        deploy_api_service: The API service deployment command (dependency)
+
+    Returns:
+        remote.Command: The nginx restart command (for dependency chaining)
     """
     # Create nginx config directory
     create_nginx_conf_dir = remote.Command(
@@ -35,7 +41,7 @@ def setup_webserver(connection, docker_provider, docker_network):
             sudo mkdir -p /conf/nginx
             sudo chmod 0755 /conf/nginx
         """,
-        opts=ResourceOptions(depends_on=[docker_provider]),
+        opts=ResourceOptions(depends_on=[deploy_api_service]),
     )
 
     # Shared asset for nginx config
@@ -67,38 +73,25 @@ def setup_webserver(connection, docker_provider, docker_network):
         opts=ResourceOptions(depends_on=[upload_nginx_conf]),
     )
 
-    # Nginx container
-    deploy_nginx = docker.Container(
+    # Deploy nginx container
+    deploy_nginx = remote.Command(
         "deploy-nginx-container",
-        image="nginx:stable",
-        name="nginx",
-        restart="always",
-        ports=[
-            docker.ContainerPortArgs(
-                internal=80,
-                external=80,
-            ),
-            docker.ContainerPortArgs(
-                internal=443,
-                external=443,
-            ),
-        ],
-        volumes=[
-            docker.ContainerVolumeArgs(
-                host_path="/conf/nginx/nginx.conf",
-                container_path="/etc/nginx/nginx.conf",
-                read_only=True,
-            )
-        ],
-        networks_advanced=[
-            docker.ContainerNetworksAdvancedArgs(
-                name=docker_network.name,
-            )
-        ],
-        opts=ResourceOptions(
-            provider=docker_provider,
-            depends_on=[move_nginx_conf],
-        ),
+        connection=connection,
+        create="""
+            docker pull nginx:stable
+            docker stop nginx || true
+            docker rm nginx || true
+            docker run -d \
+                --name nginx \
+                --network appnetwork \
+                -p 80:80 \
+                -p 443:443 \
+                -v /conf/nginx/nginx.conf:/etc/nginx/nginx.conf:ro \
+                --restart always \
+                nginx:stable
+        """,
+        triggers=[nginx_conf_asset],
+        opts=ResourceOptions(depends_on=[move_nginx_conf]),
     )
 
     # Restart nginx to ensure config is loaded
