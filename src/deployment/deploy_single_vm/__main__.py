@@ -22,6 +22,7 @@ machine_type = "n2d-standard-2"
 machine_disk_size = 50
 
 
+# Helper to load ssh keys
 def load_ssh_key_pair():
     """Load SSH keys for remote access"""
     with open("/secrets/ssh-key-deployment", "r") as private_key_file:
