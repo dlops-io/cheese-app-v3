@@ -3,22 +3,22 @@ import pulumi
 import pulumi_gcp as gcp
 from pulumi import ResourceOptions
 from pulumi_command import remote
+import pulumi_docker as docker
 import hashlib
+
 
 # Get project info and configuration
 gcp_config = pulumi.Config("gcp")
 project = gcp_config.require("project")
-ssh_user = pulumi.Config("security").require("ssh_user")
-gcp_service_account_email = pulumi.Config("security").require(
-    "gcp_service_account_email"
-)
 location = os.environ["GCP_REGION"]
 zone = os.environ["GCP_ZONE"]
+ssh_user = "sa_100110341521630214262"
+gcp_service_account_email = "deployment@ac215-project.iam.gserviceaccount.com"
 
 # Configuration variables
-persistent_disk_name = "cheese-app-demo-disk"
+persistent_disk_name = "cheese-app-demo-disk-pulumi"
 persistent_disk_size = 50
-machine_instance_name = "cheese-app-demo"
+machine_instance_name = "cheese-app-demo-pulumi"
 machine_type = "n2d-standard-2"
 machine_disk_size = 50
 
@@ -31,19 +31,19 @@ def load_ssh_key_pair():
         public_key = public_key_file.read()
     return private_key, public_key
 
-private_key, ssh_public_key = load_ssh_key_pair()
 
-print(f"Loaded SSH public key: {ssh_public_key}")
+private_key, ssh_public_key = load_ssh_key_pair()
 
 # Create a new network with auto-created subnetworks
 network = gcp.compute.Network(
-    "cheese-app-network",
+    "cheese-app-network-pulumi",
+    name="cheese-app-network-pulumi",
     auto_create_subnetworks=True,
 )
 
 # Create firewall rule for HTTP traffic
 firewall_http = gcp.compute.Firewall(
-    "allow-http",
+    "allow-http-pulumi",
     network=network.self_link,
     allows=[
         gcp.compute.FirewallAllowArgs(
@@ -57,7 +57,7 @@ firewall_http = gcp.compute.Firewall(
 
 # Create firewall rule for HTTPS traffic
 firewall_https = gcp.compute.Firewall(
-    "allow-https",
+    "allow-https-pulumi",
     network=network.self_link,
     allows=[
         gcp.compute.FirewallAllowArgs(
@@ -71,7 +71,7 @@ firewall_https = gcp.compute.Firewall(
 
 # Create firewall rule for SSH
 firewall_ssh = gcp.compute.Firewall(
-    "allow-ssh",
+    "allow-ssh-pulumi",
     network=network.self_link,
     allows=[
         gcp.compute.FirewallAllowArgs(
@@ -99,6 +99,7 @@ ubuntu_image = gcp.compute.get_image(
 # Create the VM instance
 instance = gcp.compute.Instance(
     machine_instance_name,
+    name=machine_instance_name,
     machine_type=machine_type,
     zone=zone,
     boot_disk=gcp.compute.InstanceBootDiskArgs(
@@ -124,8 +125,11 @@ instance = gcp.compute.Instance(
             ],
         )
     ],
-    metadata={"ssh-keys": f"{ssh_user}:{ssh_public_key}"},
-    tags=["http-server", "https-server"],
+    metadata={
+        "ssh-keys": f"{ssh_user}:{ssh_public_key}",
+        "enable-oslogin": "FALSE",
+    },
+    tags=["http-server-pulumi", "https-server-pulumi"],
     service_account=gcp.compute.InstanceServiceAccountArgs(
         email=gcp_service_account_email,
         scopes=[
@@ -231,6 +235,20 @@ install_dependencies = remote.Command(
     opts=ResourceOptions(depends_on=[update_system]),
 )
 
+# Install gcloud (needed for gcloud auth commands later)
+install_gcloud = remote.Command(
+    "install-gcloud",
+    connection=connection,
+    create="""
+        if ! command -v gcloud >/dev/null 2>&1; then
+            # Try installing Google Cloud SDK via apt
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y google-cloud-cli || \
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y google-cloud-sdk || true
+        fi
+    """,
+    opts=ResourceOptions(depends_on=[install_dependencies]),
+)
+
 # Provision VM: Install Docker
 install_docker = remote.Command(
     "install-docker",
@@ -251,7 +269,7 @@ install_docker = remote.Command(
         sudo apt-get update
         sudo DEBIAN_FRONTEND=noninteractive apt-get install -y docker-ce docker-ce-cli containerd.io
     """,
-    opts=ResourceOptions(depends_on=[install_dependencies]),
+    opts=ResourceOptions(depends_on=[install_gcloud]),
 )
 
 # Provision VM: Install Python packages for Docker management
@@ -273,17 +291,21 @@ configure_docker = remote.Command(
         sudo groupadd docker || true
 
         # Add current user to docker group
-        sudo usermod -aG docker {ssh_user}
+        sudo usermod -aG docker {ssh_user} || true
+        newgrp docker || true
+        
 
         # Authenticate Docker with GCP (using instance service account)
-        gcloud auth configure-docker --quiet
-        gcloud auth configure-docker us-docker.pkg.dev --quiet
+        if command -v gcloud >/dev/null 2>&1; then
+            gcloud auth configure-docker --quiet || true
+            gcloud auth configure-docker us-docker.pkg.dev --quiet || true
+        fi
 
         # Start and enable Docker service
         sudo systemctl start docker
         sudo systemctl enable docker
 
-        # Docker socket permissions
+        # Fix docker socket permissions
         sudo chmod 666 /var/run/docker.sock
     """,
     opts=ResourceOptions(depends_on=[install_pip_packages]),
@@ -325,22 +347,13 @@ move_secrets = remote.Command(
         sudo mv /tmp/gcp-service.json /srv/secrets/gcp-service.json
         sudo chmod 0644 /srv/secrets/gcp-service.json
         sudo chown root:root /srv/secrets/gcp-service.json
-        gcloud auth activate-service-account --key-file /srv/secrets/gcp-service.json
-        gcloud auth configure-docker us-docker.pkg.dev --quiet
+        if command -v gcloud >/dev/null 2>&1; then
+            gcloud auth activate-service-account --key-file /srv/secrets/gcp-service.json || true
+            gcloud auth configure-docker us-docker.pkg.dev --quiet || true
+        fi
     """,
     opts=ResourceOptions(depends_on=[upload_service_account]),
 )
-
-# Create Docker network
-create_network = remote.Command(
-    "create-docker-network",
-    connection=connection,
-    create="""
-        docker network create appnetwork || true
-    """,
-    opts=ResourceOptions(depends_on=[move_secrets]),
-)
-
 # Create directories on persistent disk
 create_dirs = remote.Command(
     "create-persistent-directories",
@@ -351,100 +364,217 @@ create_dirs = remote.Command(
         sudo chmod 0777 /mnt/disk-1/persistent
         sudo chmod 0777 /mnt/disk-1/chromadb
     """,
-    opts=ResourceOptions(depends_on=[create_network]),
+    opts=ResourceOptions(depends_on=[move_secrets]),
 )
 
-# Deploy containers
-# Frontend
-deploy_frontend = remote.Command(
-    "deploy-frontend-container",
+give_docker_access = remote.Command(
+    "give-docker-access",
     connection=connection,
-    create=frontend_tag.apply(
-        lambda tags: f"""
-            docker pull {tags[0]}
-            docker stop frontend || true
-            docker rm frontend || true
-            docker run -d \
-                --name frontend \
-                --network appnetwork \
-                -p 3000:3000 \
-                --restart always \
-                {tags[0]}
-        """
-    ),
-    opts=ResourceOptions(depends_on=[create_dirs]),
-)
-
-# Vector DB
-deploy_vector_db = remote.Command(
-    "deploy-vector-db-container",
-    connection=connection,
-    create="""
-        docker pull chromadb/chroma:latest
-        docker stop vector-db || true
-        docker rm vector-db || true
-        docker run -d \
-            --name vector-db \
-            --network appnetwork \
-            -p 8000:8000 \
-            -e IS_PERSISTENT=TRUE \
-            -e ANONYMIZED_TELEMETRY=FALSE \
-            -v /mnt/disk-1/chromadb:/chroma/chroma \
-            --restart always \
-            chromadb/chroma
+    create=f"""
+        sudo adduser {ssh_user} docker || true
+        sudo usermod -aG docker {ssh_user} || true
+        newgrp docker || true
     """,
-    opts=ResourceOptions(depends_on=[create_dirs]),
+    opts=ResourceOptions(depends_on=[move_secrets]),
 )
 
-# Load vector DB data
-load_vector_db = remote.Command(
+# Set up Docker provider with SSH credentials for remote access
+docker_provider = docker.Provider(
+    "docker-provider",
+    host=instance_ip.apply(lambda ip: f"ssh://{ssh_user}@{ip}"),
+    # SSH options to handle key-based authentication and suppress host checking
+    ssh_opts=[
+        "-i",
+        "/secrets/ssh-key-deployment",
+        "-o",
+        "StrictHostKeyChecking=no",
+        "-o",
+        "UserKnownHostsFile=/dev/null",
+    ],
+    # Authentication for Google Container Registry / Artifact Registry
+    # registry_auth=[
+    #     {
+    #         "address": "gcr.io",
+    #         "config_file": "~/.docker/config.json",
+    #     }
+    # ],
+    opts=ResourceOptions(depends_on=[install_docker, give_docker_access]),
+)
+
+
+# Create a Docker network for container communication
+docker_network = docker.Network(
+    "appnetwork",
+    name="appnetwork",
+    driver="bridge",  # Standard bridge network
+    opts=ResourceOptions(
+        provider=docker_provider,
+        depends_on=[install_docker],
+    ),
+)
+
+# Frontend
+deploy_frontend_container = docker.Container(
+    "frontend-container",
+    image=frontend_tag.apply(lambda tags: tags[0]),
+    name="frontend",
+    # Map container port to host port
+    ports=[
+        docker.ContainerPortArgs(
+            internal=3000,  # Container port
+            external=3000,  # Host port
+        )
+    ],
+    # Connect to the app network for inter-container communication
+    networks_advanced=[
+        docker.ContainerNetworksAdvancedArgs(
+            name=docker_network.name,
+        ),
+    ],
+    opts=ResourceOptions(
+        provider=docker_provider,
+        depends_on=[docker_network, create_dirs],
+    ),
+)
+
+deploy_vector_db_container = docker.Container(
+    "vector-db-container",
+    image=vector_db_cli_tag.apply(lambda tags: tags[0]),
+    name="vector-db",
+    restart="always",
+    # Map container port to host port
+    ports=[
+        docker.ContainerPortArgs(
+            internal=8000,  # Container port
+            external=8000,  # Host port
+        )
+    ],
+    # Environment variables for the container
+    envs=[
+        "IS_PERSISTENT=TRUE",
+        "ANONYMIZED_TELEMETRY=FALSE",
+    ],
+    # Mount persistent volume for ChromaDB data
+    volumes=[
+        docker.ContainerVolumeArgs(
+            host_path="/mnt/disk-1/chromadb",
+            container_path="/chroma/chroma",
+            read_only=False,
+        )
+    ],
+    # Connect to the app network for inter-container communication
+    networks_advanced=[
+        docker.ContainerNetworksAdvancedArgs(
+            name=docker_network.name,
+        ),
+    ],
+    opts=ResourceOptions(
+        provider=docker_provider,
+        depends_on=[docker_network, create_dirs],
+    ),
+)
+
+load_vector_db = docker.Container(
     "load-vector-db-data",
-    connection=connection,
-    create=vector_db_cli_tag.apply(
-        lambda tags: f"""
-            docker pull {tags[0]}
-            docker run --rm \
-                -e GCP_PROJECT="{project}" \
-                -e CHROMADB_HOST="vector-db" \
-                -e CHROMADB_PORT="8000" \
-                -e GOOGLE_APPLICATION_CREDENTIALS="/secrets/gcp-service.json" \
-                -v /srv/secrets:/secrets \
-                --network appnetwork \
-                {tags[0]} \
-                cli.py --download --load --chunk_type recursive-split
-        """
+    image=vector_db_cli_tag.apply(lambda tags: tags[0]),
+    name="vector-db-loader",
+    # Equivalent to: --rm
+    rm=True,
+    restart="no",
+    # Env variables from CLI
+    envs=[
+        f"GCP_PROJECT={project}",
+        "CHROMADB_HOST=vector-db",
+        "CHROMADB_PORT=8000",
+        "GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-service.json",
+    ],
+    # Equivalent to: -v /srv/secrets:/secrets
+    volumes=[
+        docker.ContainerVolumeArgs(
+            host_path="/srv/secrets",
+            container_path="/secrets",
+            read_only=False,
+        )
+    ],
+    # Equivalent to: --network appnetwork
+    networks_advanced=[
+        docker.ContainerNetworksAdvancedArgs(
+            name=docker_network.name,
+        )
+    ],
+    # Equivalent to: cli.py --download --load --chunk_type recursive-split
+    command=[
+        "cli.py",
+        "--download",
+        "--load",
+        "--chunk_type",
+        "recursive-split",
+    ],
+    opts=ResourceOptions(
+        provider=docker_provider,
+        depends_on=[deploy_vector_db_container],
     ),
-    opts=ResourceOptions(depends_on=[deploy_vector_db]),
 )
 
-# API Service
-deploy_api_service = remote.Command(
+deploy_api_service = docker.Container(
     "deploy-api-service-container",
-    connection=connection,
-    create=api_service_tag.apply(
-        lambda tags: f"""
-            docker pull {tags[0]}
-            docker stop api-service || true
-            docker rm api-service || true
-            docker run -d \
-                --name api-service \
-                --network appnetwork \
-                -p 9000:9000 \
-                -e GOOGLE_APPLICATION_CREDENTIALS="/secrets/gcp-service.json" \
-                -e GCP_PROJECT="{project}" \
-                -e GCS_BUCKET_NAME="cheese-app-models" \
-                -e CHROMADB_HOST="vector-db" \
-                -e CHROMADB_PORT="8000" \
-                -v /mnt/disk-1/persistent:/persistent \
-                -v /srv/secrets:/secrets \
-                --restart always \
-                {tags[0]}
-        """
+    image=api_service_tag.apply(lambda tags: tags[0]),
+    name="api-service",
+    # Equivalent of: --restart always
+    restart="always",
+    # Equivalent of: -p 9000:9000
+    ports=[
+        docker.ContainerPortArgs(
+            internal=9000,
+            external=9000,
+        )
+    ],
+    # Environment variables
+    envs=[
+        "GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-service.json",
+        f"GCP_PROJECT={project}",
+        "GCS_BUCKET_NAME=cheese-app-models",
+        "CHROMADB_HOST=vector-db",
+        "CHROMADB_PORT=8000",
+    ],
+    # Volumes
+    volumes=[
+        docker.ContainerVolumeArgs(
+            host_path="/mnt/disk-1/persistent",
+            container_path="/persistent",
+            read_only=False,
+        ),
+        docker.ContainerVolumeArgs(
+            host_path="/srv/secrets",
+            container_path="/secrets",
+            read_only=False,
+        ),
+    ],
+    # Network
+    networks_advanced=[
+        docker.ContainerNetworksAdvancedArgs(
+            name=docker_network.name,
+        )
+    ],
+    opts=ResourceOptions(
+        provider=docker_provider,
+        depends_on=[load_vector_db],
     ),
-    opts=ResourceOptions(depends_on=[load_vector_db]),
 )
 
 # Setup Nginx Webserver
+
+# Shared asset for nginx config
+nginx_conf_asset = pulumi.FileAsset("../nginx-conf/nginx/nginx.conf")
+
+
+def file_checksum(path: str) -> str:
+    with open(path, "rb") as f:
+        return hashlib.sha256(f.read()).hexdigest()
+
+
+checksum = file_checksum("../nginx-conf/nginx/nginx.conf")
+
 # Create nginx config directory
 create_nginx_conf_dir = remote.Command(
     "create-nginx-conf-directory",
@@ -456,23 +586,13 @@ create_nginx_conf_dir = remote.Command(
     opts=ResourceOptions(depends_on=[deploy_api_service]),
 )
 
-# Shared asset for nginx config
-nginx_conf_asset = pulumi.FileAsset("../nginx-conf/nginx/nginx.conf")
-
-def file_checksum(path: str) -> str:
-    with open(path, "rb") as f:
-        return hashlib.sha256(f.read()).hexdigest()
-
-# Compute checksum for nginx config
-checksum = file_checksum("../nginx-conf/nginx/nginx.conf")
-
-# Copy nginx configuration file triggered if checksum changes
+# Copy nginx configuration file
 upload_nginx_conf = remote.CopyToRemote(
     "upload-nginx-conf",
     connection=connection,
     source=nginx_conf_asset,
     remote_path="/tmp/nginx.conf",
-    triggers=[nginx_conf_asset,checksum],
+    triggers=[checksum],
     opts=ResourceOptions(depends_on=[create_nginx_conf_dir]),
 )
 
@@ -485,29 +605,45 @@ move_nginx_conf = remote.Command(
         sudo chmod 0644 /conf/nginx/nginx.conf
         sudo chown root:root /conf/nginx/nginx.conf
     """,
-    triggers=[nginx_conf_asset,checksum],
+    triggers=[checksum],
     opts=ResourceOptions(depends_on=[upload_nginx_conf]),
 )
 
-# Deploy nginx container
-deploy_nginx = remote.Command(
+deploy_nginx = docker.Container(
     "deploy-nginx-container",
-    connection=connection,
-    create="""
-        docker pull nginx:stable
-        docker stop nginx || true
-        docker rm nginx || true
-        docker run -d \
-            --name nginx \
-            --network appnetwork \
-            -p 80:80 \
-            -p 443:443 \
-            -v /conf/nginx/nginx.conf:/etc/nginx/nginx.conf:ro \
-            --restart always \
-            nginx:stable
-    """,
-    triggers=[nginx_conf_asset],
-    opts=ResourceOptions(depends_on=[move_nginx_conf]),
+    image="nginx:stable",
+    name="nginx",
+    # Equivalent of: --restart always
+    restart="always",
+    # Equivalent of: -p 80:80 -p 443:443
+    ports=[
+        docker.ContainerPortArgs(
+            internal=80,
+            external=80,
+        ),
+        docker.ContainerPortArgs(
+            internal=443,
+            external=443,
+        ),
+    ],
+    # Mount nginx config
+    volumes=[
+        docker.ContainerVolumeArgs(
+            host_path="/conf/nginx/nginx.conf",
+            container_path="/etc/nginx/nginx.conf",
+            read_only=True,
+        )
+    ],
+    # Network
+    networks_advanced=[
+        docker.ContainerNetworksAdvancedArgs(
+            name=docker_network.name,
+        )
+    ],
+    opts=ResourceOptions(
+        provider=docker_provider,
+        depends_on=[move_nginx_conf],
+    ),
 )
 
 # Restart nginx to ensure config is loaded
@@ -515,12 +651,11 @@ restart_nginx = remote.Command(
     "restart-nginx-container",
     connection=connection,
     create="""
-        docker container restart nginx
+        sudo docker container restart nginx
     """,
-    triggers=[nginx_conf_asset, checksum],
+    triggers=[checksum],
     opts=ResourceOptions(depends_on=[deploy_nginx, upload_nginx_conf]),
 )
-
 
 # Export references to stack
 pulumi.export("instance_name", instance.name)
