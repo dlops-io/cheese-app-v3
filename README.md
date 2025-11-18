@@ -68,7 +68,7 @@ sudo chmod -R 0777 conf
 ```
 
 #### Add secrets file
-* Create a file `gcp-service.json` inside `secrets` folder with the secrets json provided [PP: WHICH ONE] [SJ: This Key need Gemini access so we cannot give it out]
+* Create a file `gcp-service.json` inside `secrets` folder with the secrets json provided
 * You can create a file using the echo command:
 ```
 echo '<___Json Key___>' > secrets/gcp-service.json
