@@ -8,6 +8,7 @@ import hashlib
 import chromadb
 import requests
 import zipfile
+import traceback
 
 # Vertex AI
 from google import genai
@@ -523,52 +524,56 @@ def main(args=None):
 
 
 if __name__ == "__main__":
-	# Generate the inputs arguments parser
-	# if you type into the terminal '--help', it will provide the description
-	parser = argparse.ArgumentParser(description="CLI")
+    # Generate the inputs arguments parser
+    # if you type into the terminal '--help', it will provide the description
+    parser = argparse.ArgumentParser(description="CLI")
 
-	parser.add_argument(
-		"--chunk",
-		action="store_true",
-		help="Chunk text",
-	)
-	parser.add_argument(
-		"--embed",
-		action="store_true",
-		help="Generate embeddings",
-	)
-	parser.add_argument(
-		"--load",
-		action="store_true",
-		help="Load embeddings to vector db",
-	)
-	parser.add_argument(
-		"--query",
-		action="store_true",
-		help="Query vector db",
-	)
-	parser.add_argument(
-		"--chat",
-		action="store_true",
-		help="Chat with LLM",
-	)
-	parser.add_argument(
-		"--get",
-		action="store_true",
-		help="Get documents from vector db",
-	)
-	parser.add_argument(
-		"--agent",
-		action="store_true",
-		help="Chat with LLM Agent",
-	)
-	parser.add_argument(
-		"--download",
-		action="store_true",
-		help="Download the embeddings",
-	)
-	parser.add_argument("--chunk_type", default="char-split", help="char-split | recursive-split | semantic-split")
+    try:
+        parser.add_argument(
+            "--chunk",
+            action="store_true",
+            help="Chunk text",
+        )
+        parser.add_argument(
+            "--embed",
+            action="store_true",
+            help="Generate embeddings",
+        )
+        parser.add_argument(
+            "--load",
+            action="store_true",
+            help="Load embeddings to vector db",
+        )
+        parser.add_argument(
+            "--query",
+            action="store_true",
+            help="Query vector db",
+        )
+        parser.add_argument(
+            "--chat",
+            action="store_true",
+            help="Chat with LLM",
+        )
+        parser.add_argument(
+            "--get",
+            action="store_true",
+            help="Get documents from vector db",
+        )
+        parser.add_argument(
+            "--agent",
+            action="store_true",
+            help="Chat with LLM Agent",
+        )
+        parser.add_argument(
+            "--download",
+            action="store_true",
+            help="Download the embeddings",
+        )
+        parser.add_argument("--chunk_type", default="char-split", help="char-split | recursive-split | semantic-split")
 
-	args = parser.parse_args()
+        args = parser.parse_args()
 
-	main(args)
+        main(args)
+    except Exception as e:
+        print("Exception:", e)
+        traceback.print_exc()
