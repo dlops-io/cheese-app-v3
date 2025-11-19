@@ -592,6 +592,15 @@ initial_node_count = base_config.get_int("initialNodeCount")
 machine_type = base_config.get("machineType") 
 machine_disk_size = base_config.get_int("machineDiskSize")
 service_account_email = pulumi.Config("security").get("gcp_service_account_email")
+ksa_service_account_email = pulumi.Config("security").get("gcp_ksa_service_account_email")  
+
+# Get image references from deploy_images stack
+# For local backend, use: "organization/project/stack"
+images_stack = pulumi.StackReference("organization/deploy-images/dev")
+# Get the image tags (these are arrays, so we take the first element)
+api_service_tag = images_stack.get_output("cheese-app-api-service-tags")
+frontend_tag = images_stack.get_output("cheese-app-frontend-react-tags")
+vector_db_cli_tag = images_stack.get_output("cheese-app-vector-db-cli-tags")
 
 
 
@@ -681,8 +690,9 @@ node_pool = gcp.container.NodePool(
     "default-pool",
     cluster=cluster.name,
     location=region,
-    initial_node_count=initial_node_count,
+    initial_node_count=1,
     node_config=gcp.container.NodePoolNodeConfigArgs(
+        service_account=service_account_email,
         machine_type=machine_type,
         image_type="cos_containerd",  # Container-Optimized OS with containerd runtime
         disk_size_gb=machine_disk_size,
@@ -697,12 +707,13 @@ node_pool = gcp.container.NodePool(
     ),
     autoscaling=gcp.container.NodePoolAutoscalingArgs(
         min_node_count=1,  # Minimum nodes to keep running
-        max_node_count=initial_node_count,  # Maximum nodes for scale-up
+        max_node_count=2,  # Maximum nodes for scale-up
     ),
     management=gcp.container.NodePoolManagementArgs(
         auto_repair=True,  # Automatically repair unhealthy nodes
         auto_upgrade=True,  # Automatically upgrade to new GKE versions
     ),
+    node_locations=['us-central1-a']
 )
 
 # -----------------------------
@@ -769,7 +780,7 @@ api_ksa = k8s.core.v1.ServiceAccount(
         namespace=namespace.metadata["name"],
         annotations={
             # Critical: map KSA → GSA (Google Service Account) for Workload Identity
-            "iam.gke.io/gcp-service-account": f"{service_account_email}",
+            "iam.gke.io/gcp-service-account": f"{ksa_service_account_email}",
         },
     ),
     opts=ResourceOptions(provider=k8s_provider),
@@ -791,7 +802,7 @@ wi_member = Output.concat(  # Build the Workload Identity member string
 
 # Construct the full GSA resource ID
 gsa_full_id = pulumi.Output.concat(
-    "projects/", project_id, "/serviceAccounts/", f"{service_account_email}"
+    "projects/", project_id, "/serviceAccounts/", f"{ksa_service_account_email}"
 )
 # Grant the KSA permission to act as the GSA
 gsa_wi_binding_strict = gcp.serviceaccount.IAMMember(
@@ -840,12 +851,13 @@ chromadb_pvc = k8s.core.v1.PersistentVolumeClaim(
 
 
 
-# --------------------------
-# Pod Deployments & Services
-# --------------------------
+# # --------------------------
+# # Pod Deployments & Services
+# # --------------------------
 
 # --- Frontend Deployment ---
 # Creates pods running the frontend container on port 3000
+# ram 1.7 gb
 frontend_deployment = k8s.apps.v1.Deployment(
     "frontend",
     metadata=k8s.meta.v1.ObjectMetaArgs(
@@ -864,12 +876,16 @@ frontend_deployment = k8s.apps.v1.Deployment(
                 containers=[
                     k8s.core.v1.ContainerArgs(
                         name="frontend",
-                        image=f"",  # Container image (placeholder - needs to be filled)
+                        image=frontend_tag.apply(lambda tags: tags[0]),  # Container image (placeholder - needs to be filled)
                         image_pull_policy="IfNotPresent",  # Use cached image if available
                         ports=[k8s.core.v1.ContainerPortArgs(
                             container_port=3000,  # Frontend app listens on port 3000
                             protocol="TCP",
                         )],
+                        resources=k8s.core.v1.ResourceRequirementsArgs(
+                            requests={"cpu": "250m", "memory": "2Gi"},
+                            limits={"cpu": "500m", "memory": "3Gi"},
+                        ),
                     ),
                 ],
             ),
@@ -908,7 +924,6 @@ frontend_service = k8s.core.v1.Service(
         selector={"run": "frontend"},  # Route traffic to pods with this label
     ),
     opts=pulumi.ResourceOptions(provider=k8s_provider, depends_on=[frontend_deployment]),
-
 )
 
 
@@ -948,6 +963,10 @@ vector_db_deployment = k8s.apps.v1.Deployment(
                                 mount_path="/chroma/chroma",  # ChromaDB data directory
                             ),
                         ],
+                        resources=k8s.core.v1.ResourceRequirementsArgs(
+                            requests={"cpu": "100m", "memory": "128Mi"},
+                            limits={"cpu": "200m", "memory": "256Mi"},
+                        ),
                     ),
                 ],
                 volumes=[
@@ -986,129 +1005,142 @@ vector_db_service = k8s.core.v1.Service(
     opts=pulumi.ResourceOptions(provider=k8s_provider, depends_on=[vector_db_deployment]),
 )
 
-# --- API Deployment ---
-# Backend API with Workload Identity for GCS/GCP access and ChromaDB integration
-api_deployment = k8s.apps.v1.Deployment(
-    "api",
-    metadata=k8s.meta.v1.ObjectMetaArgs(
-        name="api",
-        namespace=namespace.metadata.name,
-    ),
-    spec=k8s.apps.v1.DeploymentSpecArgs(
-        selector=k8s.meta.v1.LabelSelectorArgs(
-            match_labels={"run": "api"},
-        ),
-        template=k8s.core.v1.PodTemplateSpecArgs(
-            metadata=k8s.meta.v1.ObjectMetaArgs(
-                labels={"run": "api"},
-            ),
-            spec=k8s.core.v1.PodSpecArgs(
-                service_account_name=ksa_name,  # Use KSA for Workload Identity (GCP access)
-                volumes=[
-                    k8s.core.v1.VolumeArgs(
-                        name="persistent-vol",
-                        empty_dir=k8s.core.v1.EmptyDirVolumeSourceArgs(),  # Temporary storage (lost on restart)
-                    )
-                ],
-                containers=[
-                    k8s.core.v1.ContainerArgs(
-                        name="api",
-                        image=f"",  # API container image (placeholder - needs to be filled)
-                        image_pull_policy="IfNotPresent",
-                        ports=[k8s.core.v1.ContainerPortArgs(
-                            container_port=9000,  # API server port
-                            protocol="TCP",
-                        )],
-                        volume_mounts=[
-                            k8s.core.v1.VolumeMountArgs(
-                                name="persistent-vol",
-                                mount_path="/persistent",  # Temporary file storage
-                            )
-                        ],
-                        env=[
-                            k8s.core.v1.EnvVarArgs(
-                                name="GCS_BUCKET_NAME",
-                                value="cheese-app-models",  # GCS bucket for ML models
-                            ),
-                            k8s.core.v1.EnvVarArgs(
-                                name="CHROMADB_HOST",
-                                value="vector-db",  # ChromaDB service name (DNS)
-                            ),
-                            k8s.core.v1.EnvVarArgs(
-                                name="CHROMADB_PORT",
-                                value="8000",
-                            ),
-                            k8s.core.v1.EnvVarArgs(
-                                name="GCP_PROJECT",
-                                value=project,
-                            ),
-                        ],
-                    ),
-                ],
-            ),
-        ),
-    ),
-    opts=pulumi.ResourceOptions(provider=k8s_provider, depends_on=vector_db_service),
-)
+
+# # --- Vector DB Loader Job ---
+# # One-time job to populate ChromaDB with initial embeddings/data
+# # Jobs run to completion and don't restart (unlike Deployments)
+# # ram 200mb
+# vector_db_loader_job = k8s.batch.v1.Job(
+#     "vector-db-loader",
+#     metadata=k8s.meta.v1.ObjectMetaArgs(
+#         name="vector-db-loader",
+#         namespace=namespace.metadata.name,
+#     ),
+#     spec=k8s.batch.v1.JobSpecArgs(
+#         backoff_limit=4,  # Retry up to 4 times on failure
+#         template=k8s.core.v1.PodTemplateSpecArgs(
+#             spec=k8s.core.v1.PodSpecArgs(
+#                 service_account_name=ksa_name,  # Use Workload Identity for GCP access
+#                 restart_policy="Never",  # Don't restart pod on completion
+#                 containers=[
+#                     k8s.core.v1.ContainerArgs(
+#                         name="vector-db-loader",
+#                         image=vector_db_cli_tag.apply(lambda tags: tags[0]),  # Loader image (placeholder - needs to be filled)
+#                         env=[
+#                             k8s.core.v1.EnvVarArgs(name="GCP_PROJECT", value=project),
+#                             k8s.core.v1.EnvVarArgs(name="CHROMADB_HOST", value="http://vector-db.deployments.svc.cluster.local"),  # Connect to ChromaDB service
+#                             k8s.core.v1.EnvVarArgs(name="CHROMADB_PORT", value="8000"),
+#                         ],
+#                         command=[
+#                             "cli.py",
+#                             "--download",
+#                             "--load",
+#                             "--chunk_type",
+#                             "recursive-split",
+#                         ],
+
+#                     ),
+#                 ]
+#             ),
+#         ),
+#     ),
+#     opts=pulumi.ResourceOptions(
+#         provider=k8s_provider,
+#         depends_on=[vector_db_service],  # Run after services are ready
+#     ),
+# )
+
+
+# # --- API Deployment ---
+# # Backend API with Workload Identity for GCS/GCP access and ChromaDB integration
+
+# # ram 300 mb 
+# api_deployment = k8s.apps.v1.Deployment(
+#     "api",
+#     metadata=k8s.meta.v1.ObjectMetaArgs(
+#         name="api",
+#         namespace=namespace.metadata.name,
+#     ),
+#     spec=k8s.apps.v1.DeploymentSpecArgs(
+#         selector=k8s.meta.v1.LabelSelectorArgs(
+#             match_labels={"run": "api"},
+#         ),
+#         template=k8s.core.v1.PodTemplateSpecArgs(
+#             metadata=k8s.meta.v1.ObjectMetaArgs(
+#                 labels={"run": "api"},
+#             ),
+#             spec=k8s.core.v1.PodSpecArgs(
+#                 service_account_name=ksa_name,  # Use KSA for Workload Identity (GCP access)
+#                 volumes=[
+#                     k8s.core.v1.VolumeArgs(
+#                         name="persistent-vol",
+#                         persistent_volume_claim=k8s.core.v1.PersistentVolumeClaimVolumeSourceArgs(
+#                             claim_name=persistent_pvc.metadata.name,  # Temporary storage (lost on restart)
+#                         ),
+#                     )
+#                 ],
+#                 containers=[
+#                     k8s.core.v1.ContainerArgs(
+#                         name="api",
+#                         image=api_service_tag.apply(lambda tags: tags[0]),  # API container image (placeholder - needs to be filled)
+#                         image_pull_policy="IfNotPresent",
+#                         ports=[k8s.core.v1.ContainerPortArgs(
+#                             container_port=9000,  # API server port
+#                             protocol="TCP",
+#                         )],
+#                         volume_mounts=[
+#                             k8s.core.v1.VolumeMountArgs(
+#                                 name="persistent-vol",
+#                                 mount_path="/persistent",  # Temporary file storage
+#                             )
+#                         ],
+#                         env=[
+#                             k8s.core.v1.EnvVarArgs(
+#                                 name="GCS_BUCKET_NAME",
+#                                 value="cheese-app-models",  # GCS bucket for ML models
+#                             ),
+#                             k8s.core.v1.EnvVarArgs(
+#                                 name="CHROMADB_HOST",
+#                                 value="http://vector-db.deployments.svc.cluster.local",  # ChromaDB service name (DNS)
+#                             ),
+#                             k8s.core.v1.EnvVarArgs(
+#                                 name="CHROMADB_PORT",
+#                                 value="8000",
+#                             ),
+#                             k8s.core.v1.EnvVarArgs(
+#                                 name="GCP_PROJECT",
+#                                 value=project,
+#                             ),
+#                         ],
+#                     ),
+#                 ],
+#             ),
+#         ),
+#     ),
+#     opts=pulumi.ResourceOptions(provider=k8s_provider, depends_on=[vector_db_loader_job]),
+# )
 
 
 
-# API service for internal cluster access
-# Cluster URL: http://api.deployments.svc.cluster.local:9000
-api_service = k8s.core.v1.Service(
-    "api-service",
-    metadata=k8s.meta.v1.ObjectMetaArgs(
-        name="api",
-        namespace=namespace.metadata.name,
-    ),
-    spec=k8s.core.v1.ServiceSpecArgs(
-        type="ClusterIP",  # Internal only
-        ports=[k8s.core.v1.ServicePortArgs(
-            port=9000,
-            target_port=9000,
-            protocol="TCP",
-        )],
-        selector={"run": "api"},
-    ),
-    opts=pulumi.ResourceOptions(provider=k8s_provider, depends_on=[api_deployment]),
-)
-
-
-
-# --- Vector DB Loader Job ---
-# One-time job to populate ChromaDB with initial embeddings/data
-# Jobs run to completion and don't restart (unlike Deployments)
-vector_db_loader_job = k8s.batch.v1.Job(
-    "vector-db-loader",
-    metadata=k8s.meta.v1.ObjectMetaArgs(
-        name="vector-db-loader",
-        namespace=namespace.metadata.name,
-    ),
-    spec=k8s.batch.v1.JobSpecArgs(
-        backoff_limit=4,  # Retry up to 4 times on failure
-        template=k8s.core.v1.PodTemplateSpecArgs(
-            spec=k8s.core.v1.PodSpecArgs(
-                service_account_name=ksa_name,  # Use Workload Identity for GCP access
-                restart_policy="Never",  # Don't restart pod on completion
-                containers=[
-                    k8s.core.v1.ContainerArgs(
-                        name="vector-db-loader",
-                        image=f"",  # Loader image (placeholder - needs to be filled)
-                        env=[
-                            k8s.core.v1.EnvVarArgs(name="GCP_PROJECT", value=project),
-                            k8s.core.v1.EnvVarArgs(name="CHROMADB_HOST", value="vector-db"),  # Connect to ChromaDB service
-                            k8s.core.v1.EnvVarArgs(name="CHROMADB_PORT", value="8000"),
-                        ],
-                    ),
-                ]
-            ),
-        ),
-    ),
-    opts=pulumi.ResourceOptions(
-        provider=k8s_provider,
-        depends_on=[vector_db_service, api_deployment],  # Run after services are ready
-    ),
-)
+# # API service for internal cluster access
+# # Cluster URL: http://api.deployments.svc.cluster.local:9000
+# api_service = k8s.core.v1.Service(
+#     "api-service",
+#     metadata=k8s.meta.v1.ObjectMetaArgs(
+#         name="api",
+#         namespace=namespace.metadata.name,
+#     ),
+#     spec=k8s.core.v1.ServiceSpecArgs(
+#         type="ClusterIP",  # Internal only
+#         ports=[k8s.core.v1.ServicePortArgs(
+#             port=9000,
+#             target_port=9000,
+#             protocol="TCP",
+#         )],
+#         selector={"run": "api"},
+#     ),
+#     opts=pulumi.ResourceOptions(provider=k8s_provider, depends_on=[api_deployment]),
+# )
 
 
 # -----------------------------------------------------------------------------
@@ -1135,7 +1167,7 @@ letsencrypt_issuer = k8s.apiextensions.CustomResource(
     metadata={"name": "letsencrypt-prod"},
     spec={
         "acme": {
-            "email": "example@example.com",  # Update with your email
+            "email": "karthikmrathod1999@gmail.com",  # Update with your email
             "server": "https://acme-v02.api.letsencrypt.org/directory",
             "privateKeySecretRef": {"name": "letsencrypt-prod"},
             "solvers": [
@@ -1156,15 +1188,15 @@ nginx_helm = k8s.helm.v3.Release(
     "nginx-f5",
     chart="nginx-ingress",
     version="2.3.1",  # pick a current stable version from F5 docs/releases
+    namespace=namespace.metadata.name,    
     repository_opts=k8s.helm.v3.RepositoryOptsArgs(
-        repo="oci://ghcr.io/nginx/charts"
+        repo="https://helm.nginx.com/stable"
     ),
     values={
         "controller": {
             # Service exposed as a LoadBalancer with your static IP
             "service": {
                 "type": "LoadBalancer",
-                "loadBalancerIP": "existing_ip_address",
             },
             # Resource requests/limits (similar to what you had)
             "resources": {
@@ -1177,7 +1209,7 @@ nginx_helm = k8s.helm.v3.Release(
                     "cpu": "200m",
                 },
             },
-            "replicaCount": 2,
+            "replicaCount": 1,
 
             # IngressClass config – default class name is "nginx" in this chart
             "ingressClass": {
@@ -1191,6 +1223,19 @@ nginx_helm = k8s.helm.v3.Release(
 )
 
 
+# Get the service created by Helm to extract the LoadBalancer IP
+nginx_service = k8s.core.v1.Service.get(
+    "nginx-ingress-service",
+    pulumi.Output.concat(
+        nginx_helm.status.namespace,
+        "/",
+        nginx_helm.status.name,
+        "-nginx-ingress-controller"  # often resolves to <release-name>-ingress-nginx-controller
+    ),
+    opts=pulumi.ResourceOptions(provider=k8s_provider, depends_on=[nginx_helm]),
+)
+nginx_ingress_ip = nginx_service.status.load_balancer.ingress[0].ip
+host = nginx_ingress_ip.apply(lambda ip: f"{ip}.sslip.io")
 # -----------------------------------------------------------------------------
 #Ingress to use TLS
 # -----------------------------------------------------------------------------
@@ -1198,11 +1243,14 @@ ingress = k8s.networking.v1.Ingress(
     "nginx-ingress",
     metadata=k8s.meta.v1.ObjectMetaArgs(
         name="nginx-ingress",
+        namespace=namespace.metadata.name,
         annotations={
             # cert-manager integration
             "cert-manager.io/cluster-issuer": "letsencrypt-prod",
             # F5 NIC supports this variant for SSL redirect
-            "ingress.kubernetes.io/ssl-redirect": "true",
+            # "ingress.kubernetes.io/ssl-redirect": "true",
+            "ingress.kubernetes.io/ssl-redirect": "false",
+
         },
     ),
     spec=k8s.networking.v1.IngressSpecArgs(
@@ -1210,28 +1258,28 @@ ingress = k8s.networking.v1.Ingress(
         ingress_class_name="nginx",
         tls=[
             k8s.networking.v1.IngressTLSArgs(
-                hosts=["temp.instel.ai"],
-                secret_name="temp-instel-tls",
+                hosts=[host], # your domain here
+                secret_name="temp-instel-tls", # this name can be anything you want 
             )
         ],
         rules=[
             k8s.networking.v1.IngressRuleArgs(
-                host="temp.instel.ai",
+                host=host, # your domain here
                 http=k8s.networking.v1.HTTPIngressRuleValueArgs(
                     paths=[
                         # API service – no regex, no rewrite
-                        k8s.networking.v1.HTTPIngressPathArgs(
-                            path="/api-service",
-                            path_type="Prefix",
-                            backend=k8s.networking.v1.IngressBackendArgs(
-                                service=k8s.networking.v1.IngressServiceBackendArgs(
-                                    name=api_service.metadata["name"],
-                                    port=k8s.networking.v1.ServiceBackendPortArgs(
-                                        number=9000
-                                    ),
-                                )
-                            ),
-                        ),
+                        # k8s.networking.v1.HTTPIngressPathArgs(
+                        #     path="/api-service",
+                        #     path_type="Prefix",
+                        #     backend=k8s.networking.v1.IngressBackendArgs(
+                        #         service=k8s.networking.v1.IngressServiceBackendArgs(
+                        #             name=api_service.metadata["name"],
+                        #             port=k8s.networking.v1.ServiceBackendPortArgs(
+                        #                 number=9000
+                        #             ),
+                        #         )
+                        #     ),
+                        # ),
                         # Frontend
                         k8s.networking.v1.HTTPIngressPathArgs(
                             path="/",
@@ -1255,3 +1303,13 @@ ingress = k8s.networking.v1.Ingress(
         depends_on=[nginx_helm, letsencrypt_issuer],
     ),
 )
+
+
+
+pulumi.export("cluster_name", cluster.name)
+pulumi.export("cluster_endpoint", cluster.endpoint)
+pulumi.export("kubeconfig", k8s_provider.kubeconfig)
+pulumi.export("namespace", namespace.metadata.name)
+pulumi.export("application_url", "https://temp.instel.ai")  # your domain
+pulumi.export("ingress_name", ingress.metadata.name)
+pulumi.export("nginx_ingress_ip", nginx_ingress_ip)
