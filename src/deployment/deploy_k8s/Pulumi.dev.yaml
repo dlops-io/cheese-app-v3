@@ -1,3 +1,12 @@
 encryptionsalt: v1:vBKbxc4AEtk=:v1:IusIdyG7xzuy7EVc:9nX0bDWqqohvTdEJTbUd51hzUbLozg==
 config:
   gcp:project: ac215-project
+  gcp:region: us-central1
+  security:gcp_service_account_email: deployment@ac215-project.iam.gserviceaccount.com
+  security:gcp_ksa_service_account_email: gcp-service@ac215-project.iam.gserviceaccount.com
+  deploy-k8s:clusterName: cheese-app-cluster
+  deploy-k8s:description: GKE cluster for Cheese App deployment
+  deploy-k8s:initialNodeCount: "1"
+  deploy-k8s:machineType: n2d-standard-2
+  deploy-k8s:machineDiskSize: "50"
+  security:ssh_user: sa_100110341521630214262

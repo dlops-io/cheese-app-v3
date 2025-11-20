@@ -418,8 +418,16 @@ Search for each of these in the GCP search bar and click enable to enable these 
 - When setting up pulumi for the first time run:
 ```
 pulumi stack init dev
-pulumi config set gcp:project ac215-project
+pulumi config set gcp:project ac215-project --stack dev
+pulumi config set security:ssh_user sa_100110341521630214262 --stack dev
+pulumi config set security:gcp_service_account_email deployment@ac215-project.iam.gserviceaccount.com --stack dev
+pulumi config set deploy-k8s:clusterName cheese-app-cluster --stack dev
+pulumi config set deploy-k8s:description "GKE cluster for Cheese App deployment" --stack dev
+pulumi config set deploy-k8s:initialNodeCount 1 --stack dev
+pulumi config set deploy-k8s:machineType n2d-standard-2 --stack dev
+pulumi config set deploy-k8s:machineDiskSize 50 --stack dev
 ```
+
 This will save all your deployment states to a GCP bucket
 
 - If a stack has already been setup, you can preview deployment using:
