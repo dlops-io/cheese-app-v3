@@ -16,7 +16,7 @@ uvicorn_server() {
 }
 
 uvicorn_server_production() {
-    uv run uvicorn api.service:app --host 0.0.0.0 --port 9000 --lifespan on
+    uv run uvicorn api.service:app --host 0.0.0.0 --port 9000 --root-path /api-service --lifespan on
 }
 
 export -f uvicorn_server
