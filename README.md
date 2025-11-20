@@ -454,7 +454,7 @@ This will save all your deployment states to a GCP bucket
 pulumi preview --stack dev --refresh
 ```
 
-- To create a VM and deploy all our container images run:
+- To create a cluster and deploy all our container images run:
 ```
 pulumi up --stack dev --refresh -y
 ```
@@ -499,9 +499,8 @@ kubectl exec --stdin --tty api-5d4878c545-47754 --namespace=cheese-app-cluster-n
 
 ### Delete Cluster
 ```
-ansible-playbook deploy-k8s-cluster.yml -i inventory.yml --extra-vars cluster_state=absent
+pulumi destroy --stack dev --refresh -y
 ```
-
 
 ---
 
