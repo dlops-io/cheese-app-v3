@@ -2,25 +2,24 @@ import pulumi
 import pulumi_gcp as gcp
 from pulumi import ResourceOptions, Output
 import pulumi_kubernetes as k8s
+import yaml
 
 base_config = pulumi.Config()
-cluster_name = base_config.get("clusterName")
-description = base_config.get("description")
-initial_node_count = base_config.get_int("initialNodeCount")
-machine_type = base_config.get("machineType")
-machine_disk_size = base_config.get_int("machineDiskSize")
 service_account_email = pulumi.Config("security").get("gcp_service_account_email")
 ksa_service_account_email = pulumi.Config("security").get(
     "gcp_ksa_service_account_email"
 )
+initial_node_count = 1
+machine_type = "n2d-standard-2"
+machine_disk_size = 50
 
 
-def create_cluster(project, region, network, subnet):
+def create_cluster(project, region, network, subnet, app_name):
     # Create GKE cluster with private nodes, workload identity enabled, and no default node pool
     cluster = gcp.container.Cluster(
-        "dev_cluster",
-        name=cluster_name,
-        description=description,
+        f"{app_name}-cluster",
+        name=f"{app_name}-cluster",
+        description="GKE cluster",
         location=region,
         deletion_protection=False,
         network=network.name,
@@ -42,7 +41,7 @@ def create_cluster(project, region, network, subnet):
 
     # Create custom node pool with autoscaling, auto-repair, and standard GCP service permissions
     node_pool = gcp.container.NodePool(
-        "default-pool",
+        f"{app_name}-pool",
         cluster=cluster.name,
         location=region,
         initial_node_count=1,
@@ -75,44 +74,72 @@ def create_cluster(project, region, network, subnet):
     # Kubeconfig for k8s provider
     # -----------------------------
     k8s_info = pulumi.Output.all(cluster.name, cluster.endpoint, cluster.master_auth)
-    cluster_kubeconfig = k8s_info.apply(
-        lambda info: f"""apiVersion: v1
-    clusters:
-    - cluster:
-        certificate-authority-data: {info[2]["cluster_ca_certificate"]}
-        server: https://{info[1]}
-    name: {project}_{region}_{info[0]}
-    contexts:
-    - context:
-        cluster: {project}_{region}_{info[0]}
-        user: {project}_{region}_{info[0]}
-    name: {project}_{region}_{info[0]}
-    current-context: {project}_{region}_{info[0]}
-    kind: Config
-    preferences: {{}}
-    users:
-    - name: {project}_{region}_{info[0]}
-    user:
-        exec:
-        apiVersion: client.authentication.k8s.io/v1beta1
-        command: gke-gcloud-auth-plugin
-        installHint: Install gke-gcloud-auth-plugin for use with kubectl
-        provideClusterInfo: true
-        interactiveMode: Never
-    """
-    )
+
+    def make_kubeconfig(info):
+        cluster_name, endpoint, master_auth = info
+        context_name = f"{project}_{region}_{cluster_name}"
+
+        kubeconfig = {
+            "apiVersion": "v1",
+            "kind": "Config",
+            "clusters": [
+                {
+                    "name": context_name,
+                    "cluster": {
+                        "certificate-authority-data": master_auth[
+                            "cluster_ca_certificate"
+                        ],
+                        "server": f"https://{endpoint}",
+                    },
+                }
+            ],
+            "contexts": [
+                {
+                    "name": context_name,
+                    "context": {"cluster": context_name, "user": context_name},
+                }
+            ],
+            "current-context": context_name,
+            "users": [
+                {
+                    "name": context_name,
+                    "user": {
+                        "exec": {
+                            "apiVersion": "client.authentication.k8s.io/v1beta1",
+                            "command": "gke-gcloud-auth-plugin",
+                            "installHint": "Install gke-gcloud-auth-plugin for use with kubectl",
+                            "provideClusterInfo": True,
+                            "interactiveMode": "Never",
+                        }
+                    },
+                }
+            ],
+        }
+
+        # Return as YAML with explicit quoting for special characters
+        result = yaml.dump(kubeconfig, default_flow_style=False, default_style='"')
+
+        # Debug
+        print("=" * 80)
+        print("Generated kubeconfig:")
+        print(result)
+        print("=" * 80)
+
+        return result
+
+    cluster_kubeconfig = k8s_info.apply(make_kubeconfig)
 
     # Create Kubernetes provider using GKE cluster credentials to deploy K8s resources
     k8s_provider = k8s.Provider(
-        "gke_k8s",
+        "gke_k8s_v2",
         kubeconfig=cluster_kubeconfig,  # Use the kubeconfig generated from the GKE cluster
         opts=ResourceOptions(depends_on=[node_pool]),  # Wait for node pool to be ready
     )
 
     # Create Kubernetes namespace for application deployments
     namespace = k8s.core.v1.Namespace(
-        "deployments-namespace",
-        metadata={"name": "deployments"},
+        f"{app_name}-namespace",
+        metadata={"name": f"{app_name}-namespace"},
         opts=ResourceOptions(provider=k8s_provider),
     )
 
