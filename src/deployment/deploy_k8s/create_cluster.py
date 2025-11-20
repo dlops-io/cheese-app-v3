@@ -2,6 +2,7 @@ import pulumi
 import pulumi_gcp as gcp
 from pulumi import ResourceOptions, Output
 import pulumi_kubernetes as k8s
+import pulumi_command as command
 import yaml
 
 base_config = pulumi.Config()
@@ -185,6 +186,16 @@ def create_cluster(project, region, network, subnet, app_name):
         service_account_id=gsa_full_id,
         role="roles/iam.workloadIdentityUser",  # Required role for Workload Identity
         member=wi_member,  # The KSA that will impersonate this GSA
+    )
+
+    # Connect to the cluster
+    connect_k8s_command = command.local.Command(
+        "connect-k8s-command",
+        create=Output.concat(
+            "gcloud container clusters get-credentials ",
+            cluster.name,
+            f" --zone {region} --project {project}"
+        ),
     )
 
     return cluster, namespace, k8s_provider, ksa_name

@@ -458,15 +458,19 @@ Here is how the various services communicate between each other in the Kubernete
 
 ```mermaid
 graph LR
-    B[Browser] -->|nginx-ip.sslip.io/| I[Ingress Controller]
-    I -->|/| F[Frontend Service<br/>NodePort:3000]
-    I -->|/api-service/| A[API Service<br/>NodePort:9000]
-    A -->|vector-db:8000| V[Vector-DB Service<br/>NodePort:8000]
-
+    B[Browser] -->|nginx-ip.sslip.io| LB[LoadBalancer Service<br/>External IP]
+    LB --> I[Nginx Ingress Controller]
+    I -->|/ path| F[Frontend Service<br/>ClusterIP:3000]
+    I -->|/api-service path| A[API Service<br/>ClusterIP:9000]
+    A -->|vector-db DNS:8000| V[Vector-DB Service<br/>ClusterIP:8000]
+    V -.->|one-time load| J[Vector DB Loader Job]
+    
+    style LB fill:#yellow
     style I fill:#lightblue
     style F fill:#lightgreen
     style A fill:#lightgreen
     style V fill:#lightgreen
+    style J fill:#orange
 ```
 
 ### Try some kubectl commands
@@ -483,14 +487,24 @@ kubectl get nodes
 
 ### If you want to shell into a container in a Pod
 ```
-kubectl get pods --namespace=cheese-app-cluster-namespace
-kubectl get pod api-5d4878c545-47754 --namespace=cheese-app-cluster-namespace
-kubectl exec --stdin --tty api-5d4878c545-47754 --namespace=cheese-app-cluster-namespace  -- /bin/bash
+kubectl get pods --namespace=cheese-app-namespace
+kubectl get pod api-c4fb784b-2llgs --namespace=cheese-app-namespace
+kubectl exec --stdin --tty api-c4fb784b-2llgs --namespace=cheese-app-namespace  -- /bin/bash
 ```
 
 ### View the App
-* Copy the `nginx_ingress_ip` from the terminal from the create cluster command
-* Go to `http://<YOUR INGRESS IP>.sslip.io`
+* From the terminal view the results of Pulumi
+```
+Outputs:
+    app_url         : "http://34.9.143.147.sslip.io"
+    cluster_endpoint: "104.197.105.203"
+    cluster_name    : "cheese-app-cluster"
+    ingress_name    : "nginx-ingress"
+    kubeconfig      : [secret]
+    namespace       : "cheese-app-namespace"
+    nginx_ingress_ip: "34.9.143.147"
+```
+* Go to `app_url`
 
 ### Delete Cluster
 ```
