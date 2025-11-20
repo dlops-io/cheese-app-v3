@@ -4,7 +4,9 @@ from pulumi import StackReference, ResourceOptions, Output
 import pulumi_kubernetes as k8s
 
 
-def setup_loadbalancer(namespace, k8s_provider, api_service, frontend_service):
+def setup_loadbalancer(
+    namespace, k8s_provider, api_service, frontend_service, app_name
+):
     # Nginx Ingress Controller using Helm and Create Ingress Resource
     nginx_helm = k8s.helm.v3.Release(
         "nginx-f5",

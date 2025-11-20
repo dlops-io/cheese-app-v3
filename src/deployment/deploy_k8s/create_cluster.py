@@ -120,10 +120,10 @@ def create_cluster(project, region, network, subnet, app_name):
         result = yaml.dump(kubeconfig, default_flow_style=False)
 
         # Debug
-        print("=" * 80)
-        print("Generated kubeconfig:")
-        print(result)
-        print("=" * 80)
+        # print("=" * 80)
+        # print("Generated kubeconfig:")
+        # print(result)
+        # print("=" * 80)
 
         return result
 
