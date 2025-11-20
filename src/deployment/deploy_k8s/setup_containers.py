@@ -4,7 +4,7 @@ from pulumi import StackReference, ResourceOptions, Output
 import pulumi_kubernetes as k8s
 
 
-def setup_containers(project, namespace, k8s_provider, ksa_name):
+def setup_containers(project, namespace, k8s_provider, ksa_name, app_name):
     # Get image references from deploy_images stack
     # For local backend, use: "organization/project/stack"
     images_stack = pulumi.StackReference("organization/deploy-images/dev")
@@ -129,7 +129,7 @@ def setup_containers(project, namespace, k8s_provider, ksa_name):
                     containers=[
                         k8s.core.v1.ContainerArgs(
                             name="vector-db",
-                            image="chromadb/latest",
+                            image="chromadb/chroma",
                             ports=[
                                 k8s.core.v1.ContainerPortArgs(
                                     container_port=8000,
