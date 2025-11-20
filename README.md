@@ -419,8 +419,6 @@ Search for each of these in the GCP search bar and click enable to enable these 
 ```
 pulumi stack init dev
 pulumi config set gcp:project ac215-project --stack dev
-pulumi config set security:gcp_service_account_email deployment@ac215-project.iam.gserviceaccount.com --stack dev
-pulumi config set security:gcp_ksa_service_account_email gcp-service@ac215-project.iam.gserviceaccount.com --stack dev
 ```
 
 This will save all your deployment states to a GCP bucket
@@ -441,6 +439,8 @@ pulumi up --stack dev -y
 ```
 pulumi stack init dev
 pulumi config set gcp:project ac215-project
+pulumi config set security:gcp_service_account_email deployment@ac215-project.iam.gserviceaccount.com --stack dev
+pulumi config set security:gcp_ksa_service_account_email gcp-service@ac215-project.iam.gserviceaccount.com --stack dev
 ```
 This will save all your deployment states to a GCP bucket
 
