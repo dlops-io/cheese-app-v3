@@ -306,6 +306,10 @@ def setup_containers(project, namespace, k8s_provider, ksa_name, app_name):
                                     name="GCP_PROJECT",
                                     value=project,
                                 ),
+                                k8s.core.v1.EnvVarArgs(
+                                    name="ROOT_PATH",
+                                    value="/api-service",
+                                ),
                             ],
                         ),
                     ],
