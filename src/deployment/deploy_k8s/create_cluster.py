@@ -116,8 +116,8 @@ def create_cluster(project, region, network, subnet, app_name):
             ],
         }
 
-        # Return as YAML with explicit quoting for special characters
-        result = yaml.dump(kubeconfig, default_flow_style=False, default_style='"')
+        # Generate YAML
+        result = yaml.dump(kubeconfig, default_flow_style=False)
 
         # Debug
         print("=" * 80)
