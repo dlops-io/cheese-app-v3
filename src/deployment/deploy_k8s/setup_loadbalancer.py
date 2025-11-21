@@ -56,13 +56,13 @@ def setup_loadbalancer(
         ),
         opts=pulumi.ResourceOptions(provider=k8s_provider, depends_on=[nginx_helm]),
     )
-    nginx_ingress_ip = nginx_service.status.load_balancer.ingress[0].ip
-    host = nginx_ingress_ip.apply(lambda ip: f"{ip}.sslip.io")
+    ip_address = nginx_service.status.load_balancer.ingress[0].ip
+    host = ip_address.apply(lambda ip: f"{ip}.sslip.io")
 
     ingress = k8s.networking.v1.Ingress(
-        "nginx-ingress",
+        f"{app_name}-ingress",
         metadata=k8s.meta.v1.ObjectMetaArgs(
-            name="nginx-ingress",
+            name=f"{app_name}-ingress",
             namespace=namespace.metadata.name,
             annotations={
                 # cert-manager integration
@@ -73,10 +73,10 @@ def setup_loadbalancer(
             },
         ),
         spec=k8s.networking.v1.IngressSpecArgs(
-            ingress_class_name="nginx",
+            ingress_class_name="nginx",  # Use nginx
             rules=[
                 k8s.networking.v1.IngressRuleArgs(
-                    host=host,  # your domain here
+                    host=host,
                     http=k8s.networking.v1.HTTPIngressRuleValueArgs(
                         paths=[
                             # API service
@@ -116,4 +116,4 @@ def setup_loadbalancer(
         ),
     )
 
-    return nginx_ingress_ip, ingress, host
+    return ip_address, ingress, host

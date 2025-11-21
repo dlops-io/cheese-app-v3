@@ -1,7 +1,5 @@
-encryptionsalt: v1:Ql1K//qmtaQ=:v1:fhFyMtpDtq0O41hJ:fA2sI27np3naGsGEOOg3GMoHM2TJfw==
+encryptionsalt: v1:vmgGxQyBMLw=:v1:vZuGFwZ7Y0y/nMOr:s1r530hWuVrwvMpJQ88UOOYecoaHVA==
 config:
   gcp:project: ac215-project
-  security:ssh_user: sa_100110341521630214262
   security:gcp_service_account_email: deployment@ac215-project.iam.gserviceaccount.com
   security:gcp_ksa_service_account_email: gcp-service@ac215-project.iam.gserviceaccount.com
-  deploy-k8s:setupSSL: "false"
