@@ -31,10 +31,9 @@ async def get_index():
     return {"message": "Welcome to AC215"}
 
 
-@api_app.get("/square_root/")
-async def square_root(x: float = 1, y: float = 2):
-    z = x**2 + y**2
-    return z**0.5
+@api_app.get("/status")
+async def get_api_status():
+    return {"version": "3.0"}
 
 
 # Additional routers here
