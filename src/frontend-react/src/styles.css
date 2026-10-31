@@ -1,0 +1,112 @@
+@import 'tailwindcss';
+@import '@fontsource/nunito/latin-400.css';
+@import '@fontsource/nunito/latin-600.css';
+@import '@fontsource/nunito/latin-700.css';
+@import '@fontsource/baloo-2/latin-600.css';
+@import '@fontsource/baloo-2/latin-700.css';
+
+@theme {
+  --color-page: #0d2727;
+  --color-panel: #133738;
+  --color-card: #183f41;
+  --color-cream: #f3efe4;
+  --color-muted: #9fbab7;
+  --color-line: rgb(243 239 228 / 0.12);
+  --color-line-strong: rgb(243 239 228 / 0.2);
+  --color-cheese: #f6c445;
+  --color-ink: #1c1606;
+  --color-danger: #ee6a5c;
+
+  --font-sans: 'Nunito', system-ui, sans-serif;
+  --font-display: 'Baloo 2', ui-rounded, system-ui, sans-serif;
+}
+
+@layer base {
+  body {
+    background: var(--color-page);
+    color: var(--color-cream);
+    font-family: var(--font-sans);
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    line-height: 1.15;
+  }
+
+  button {
+    cursor: pointer;
+  }
+
+  a:focus-visible,
+  button:focus-visible,
+  textarea:focus-visible {
+    outline: 2px solid var(--color-cheese);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  /* Text that arrives as markdown or HTML: Gemini's answers and the newsletters */
+  .rich-text {
+    line-height: 1.65;
+    overflow-wrap: anywhere;
+  }
+
+  .rich-text > * + * {
+    margin-top: 0.75em;
+  }
+
+  .rich-text h1,
+  .rich-text h2,
+  .rich-text h3 {
+    margin-top: 1.2em;
+    font-size: 1.25rem;
+  }
+
+  .rich-text strong {
+    font-weight: 700;
+  }
+
+  .rich-text ul {
+    padding-left: 1.25rem;
+    list-style: disc;
+  }
+
+  .rich-text ol {
+    padding-left: 1.25rem;
+    list-style: decimal;
+  }
+
+  .rich-text a {
+    color: var(--color-cheese);
+    text-decoration: underline;
+  }
+
+  .rich-text blockquote {
+    padding-left: 1rem;
+    border-left: 3px solid var(--color-line-strong);
+    color: var(--color-muted);
+  }
+
+  .rich-text code {
+    padding: 0.1em 0.3em;
+    border-radius: 4px;
+    background: var(--color-card);
+    font-size: 0.9em;
+  }
+
+  .rich-text table {
+    display: block;
+    overflow-x: auto;
+    border-collapse: collapse;
+  }
+
+  .rich-text th,
+  .rich-text td {
+    padding: 0.35rem 0.75rem;
+    border: 1px solid var(--color-line);
+    text-align: left;
+  }
+}
