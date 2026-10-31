@@ -1,32 +1,20 @@
-import os
-from typing import Dict, Any, List, Optional
-from fastapi import HTTPException
-import base64
+"""Chat with Gemini: the plain LLM mode, and the pieces the other modes build on."""
+
 import io
-from PIL import Image
-from pathlib import Path
-import traceback
 
-# Vertex AI
+from fastapi import HTTPException
 from google import genai
-from google.genai import types
-from google.genai.types import Content, Part, GenerationConfig, ToolConfig
-from google.genai import errors
-from google.genai.chats import Chat
+from google.genai import errors, types
+from PIL import Image, UnidentifiedImageError
 
-# Setup
-GCP_PROJECT = os.environ["GCP_PROJECT"]
-GCP_LOCATION = "us-central1"
-EMBEDDING_MODEL = "text-embedding-004"
-EMBEDDING_DIMENSION = 256
-GENERATIVE_MODEL = "gemini-2.0-flash-001"
+from api import settings
+from api.utils.chat_utils import ChatHistoryManager, decode_image
 
 #############################################################################
 #                       Initialize the LLM Client                           #
-llm_client = genai.Client(vertexai=True, project=GCP_PROJECT, location=GCP_LOCATION)
+llm_client = genai.Client(vertexai=True, project=settings.GCP_PROJECT, location=settings.GCP_LOCATION)
 #############################################################################
 
-# Initialize the GenerativeModel with specific system instructions
 SYSTEM_INSTRUCTION = """
 You are an AI assistant specialized in cheese knowledge.
 
@@ -43,126 +31,64 @@ When answering a query:
 Your goal is to provide accurate, helpful information about cheese for each query.
 """
 
-# Initialize chat sessions
-chat_sessions: Dict[str, Chat] = {}
+IMAGE_PROMPT = "Name the cheese in the image, no descriptions needed"
 
 
-def create_chat_session(past_history=None) -> Chat:
-    """Create a new chat session with the model"""
-    # Create a new chat session
-    return llm_client.chats.create(model=GENERATIVE_MODEL, history=past_history)
-
-
-def generate_chat_response(chat_session: Chat, message: Dict) -> str:
-    """
-    Generate a response using the chat session to maintain history.
-    Handles both text and image inputs.
-
-    Args:
-        chat_session: The Vertex AI chat session
-        message: Dict containing 'content' (text) and optionally 'image' (base64 string)
-
-    Returns:
-        str: The model's response
-    """
-
+def image_part(image_bytes: bytes) -> types.Part:
+    """An image for Gemini. The bytes say what kind of image it is, whatever the file is called."""
     try:
-        # Initialize parts list for the message
-        message_parts = []
-
-        # Process image if present
-        if message.get("image"):
-            try:
-                # Extract the actual base64 data and mime type
-                base64_string = message.get("image")
-                if "," in base64_string:
-                    header, base64_data = base64_string.split(",", 1)
-                    mime_type = header.split(":")[1].split(";")[0]
-                else:
-                    base64_data = base64_string
-                    mime_type = "image/jpeg"  # default to JPEG if no header
-
-                # Decode base64 to bytes
-                image_bytes = base64.b64decode(base64_data)
-
-                # Create an image Part using FileData
-                image_part = Part.from_bytes(data=image_bytes, mime_type=mime_type)
-                message_parts.append(image_part)
-
-                # Add text content if present
-                if message.get("content"):
-                    message_parts.append(message["content"])
-                else:
-                    message_parts.append(
-                        "Name the cheese in the image, no descriptions needed"
-                    )
-
-            except ValueError as e:
-                print(f"Error processing image: {str(e)}")
-                raise HTTPException(
-                    status_code=400, detail=f"Image processing failed: {str(e)}"
-                )
-        elif message.get("image_path"):
-            # Read the image file
-            image_path = os.path.join("chat-history", "llm", message.get("image_path"))
-            with Path(image_path).open("rb") as f:
-                image_bytes = f.read()
-
-            # Determine MIME type based on file extension
-            mime_type = {
-                ".jpg": "image/jpeg",
-                ".jpeg": "image/jpeg",
-                ".png": "image/png",
-                ".gif": "image/gif",
-            }.get(Path(image_path).suffix.lower(), "image/jpeg")
-
-            # Create an image Part using FileData
-            image_part = Part.from_bytes(data=image_bytes, mime_type=mime_type)
-            message_parts.append(image_part)
-
-            # Add text content if present
-            if message.get("content"):
-                message_parts.append(message["content"])
-            else:
-                message_parts.append(
-                    "Name the cheese in the image, no descriptions needed"
-                )
-        else:
-            # Add text content if present
-            if message.get("content"):
-                message_parts.append(message["content"])
-
-        if not message_parts:
-            raise ValueError("Message must contain either text content or image")
-
-        # Send message with all parts to the model
-        response = chat_session.send_message(message_parts)
-
-        return response.text
-
-    except Exception as e:
-        print(f"Error generating response: {str(e)}")
-        traceback.print_exc()
-        raise HTTPException(
-            status_code=500, detail=f"Failed to generate response: {str(e)}"
-        )
+        with Image.open(io.BytesIO(image_bytes)) as image:
+            mime_type = image.get_format_mimetype()
+    except UnidentifiedImageError:
+        raise HTTPException(status_code=400, detail="Image processing failed: not an image")
+    return types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
 
 
-def rebuild_chat_session(chat_history: List[Dict]) -> Chat:
-    """Rebuild a chat session with complete context"""
+def message_parts(message: dict) -> list:
+    """A new message as parts for Gemini: an image needs some text with it"""
+    if message.get("image"):
+        return [image_part(decode_image(message["image"])), message.get("content") or IMAGE_PROMPT]
+    return [message["content"]]
 
-    formatted_history = []
-    for message in chat_history:
-        if message["role"] == "user":
-            formatted_history.append(
-                types.UserContent(parts=[types.Part.from_text(text=message["content"])])
+
+def to_history(messages: list[dict], chat_manager: ChatHistoryManager) -> list[types.Content]:
+    """The saved messages of a chat, in the form Gemini takes as history"""
+    history = []
+    for message in messages:
+        if message["role"] == "assistant":
+            history.append(types.ModelContent(parts=[types.Part.from_text(text=message["content"])]))
+        elif message["role"] == "cnn":
+            label = message["results"]["prediction_label"]
+            text = f"We have already identified the image of a cheese as {label}"
+            history.append(types.UserContent(parts=[types.Part.from_text(text=text)]))
+        elif message["role"] == "user":
+            parts = []
+            image_bytes = (
+                chat_manager.load_image(message["image_path"]) if message.get("image_path") else None
             )
-        elif message["role"] == "assistant":
-            formatted_history.append(
-                types.ModelContent(
-                    parts=[types.Part.from_text(text=message["content"])]
-                )
-            )
+            if image_bytes:
+                parts.append(image_part(image_bytes))
+            text = message.get("content") or (IMAGE_PROMPT if image_bytes else "")
+            if text:
+                parts.append(types.Part.from_text(text=text))
+            if parts:
+                history.append(types.UserContent(parts=parts))
+    return history
 
-    new_session = create_chat_session(formatted_history)
-    return new_session
+
+def ask_gemini(system_instruction: str, history: list[types.Content], parts: list) -> str:
+    """Send one message to Gemini, with the conversation so far"""
+    config = types.GenerateContentConfig(system_instruction=system_instruction)
+    chat = llm_client.chats.create(model=settings.GENERATIVE_MODEL, config=config, history=history)
+    try:
+        text = chat.send_message(parts).text
+    except errors.APIError as e:
+        raise HTTPException(status_code=502, detail=f"Gemini: {e}")
+    if not text:
+        raise HTTPException(status_code=502, detail="Gemini returned no text")
+    return text
+
+
+def respond(chat_manager: ChatHistoryManager, past_messages: list[dict], message: dict) -> dict:
+    history = to_history(past_messages, chat_manager)
+    return {"role": "assistant", "content": ask_gemini(SYSTEM_INSTRUCTION, history, message_parts(message))}
