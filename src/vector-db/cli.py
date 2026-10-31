@@ -6,28 +6,29 @@ import time
 import glob
 import hashlib
 import chromadb
-import requests
+import urllib.request
 import zipfile
-import traceback
 
 # Vertex AI
 from google import genai
 from google.genai import types
-from google.genai.types import Content, Part, GenerationConfig, ToolConfig
+from google.genai.types import Content, Part
 from google.genai import errors
 
 # Langchain
-from langchain.text_splitter import CharacterTextSplitter
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import CharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from semantic_splitter import SemanticChunker
 import agent_tools
 
 # Setup
 GCP_PROJECT = os.environ["GCP_PROJECT"]
-GCP_LOCATION = "us-central1"
+# Current Gemini models answer on the global endpoint only: a region such as us-central1 gives a 404
+GCP_LOCATION = os.getenv("GCP_LOCATION", "global")
 EMBEDDING_MODEL = "text-embedding-004"
 EMBEDDING_DIMENSION = 256
-GENERATIVE_MODEL = "gemini-2.0-flash-001"
+# When Google retires a model, this is the only line to change
+GENERATIVE_MODEL = os.getenv("GENERATIVE_MODEL", "gemini-3.8-flash")
 INPUT_FOLDER = "input-datasets"
 OUTPUT_FOLDER = "outputs"
 CHROMADB_HOST = os.environ["CHROMADB_HOST"]
@@ -179,7 +180,7 @@ def chunk(method="char-split"):
     for text_file in text_files:
         print("Processing file:", text_file)
         filename = os.path.basename(text_file)
-        book_name = filename.split(".")[0]
+        book_name = os.path.splitext(filename)[0]
 
         with open(text_file) as f:
             input_text = f.read()
@@ -311,7 +312,7 @@ def load(method="char-split"):
 
 
 def query(method="char-split"):
-    print("load()")
+    print("query()")
 
     # Connect to chroma DB
     client = chromadb.HttpClient(host=CHROMADB_HOST, port=CHROMADB_PORT)
@@ -395,13 +396,12 @@ def chat(method="char-split"):
 	"""
 
 	print("INPUT_PROMPT: ",INPUT_PROMPT)
-	response = generative_model.generate_content(
-		[INPUT_PROMPT],  # Input prompt
-		generation_config=generation_config,  # Configuration settings
-		stream=False,  # Enable streaming for responses
+	response = llm_client.models.generate_content(
+		model=GENERATIVE_MODEL,
+		contents=INPUT_PROMPT,
+		config=types.GenerateContentConfig(system_instruction=SYSTEM_INSTRUCTION),
 	)
-	generated_text = response.text
-	print("LLM Response:", generated_text)
+	print("LLM Response:", response.text)
 
 
 def get(method="char-split"):
@@ -437,43 +437,37 @@ def agent(method="char-split"):
 	user_prompt_content = Content(
     	role="user",
 		parts=[
-			Part.from_text("Describe where cheese making is important in Pavlos's book?"),
+			Part.from_text(text="Describe where cheese making is important in Pavlos's book?"),
 		],
 	)
 	
-	# Step 1: Prompt LLM to find the tool(s) to execute to find the relevant chunks in vector db
+	# The agent loop: the LLM asks for tools, we run them and send back the results, until it answers
 	print("user_prompt_content: ",user_prompt_content)
-	response = generative_model.generate_content(
-		user_prompt_content,
-		generation_config=GenerationConfig(temperature=0),  # Configuration settings
-		tools=[agent_tools.cheese_expert_tool],  # Tools available to the model
-		tool_config=ToolConfig(
-			function_calling_config=ToolConfig.FunctionCallingConfig(
-				# ANY mode forces the model to predict only function calls
-				mode=ToolConfig.FunctionCallingConfig.Mode.ANY,
-		))
-	)
-	print("LLM Response:", response)
-
-	# Step 2: Execute the function and send chunks back to LLM to answer get the final response
-	function_calls = response.candidates[0].function_calls
-	print("Function calls:")
-	function_responses = agent_tools.execute_function_calls(function_calls,collection,embed_func=generate_query_embedding)
-	if len(function_responses) == 0:
-		print("Function calls did not result in any responses...")
-	else:
-		# Call LLM with retrieved responses
-		response = generative_model.generate_content(
-			[
-				user_prompt_content,  # User prompt
-				response.candidates[0].content,  # Function call response
-				Content(
-					parts=function_responses
+	contents = [user_prompt_content]
+	# ANY forces a tool call on the first round, so the answer comes from the books; then it may answer
+	mode = "ANY"
+	for _ in range(5):
+		response = llm_client.models.generate_content(
+			model=GENERATIVE_MODEL,
+			contents=contents,
+			config=types.GenerateContentConfig(
+				temperature=0,
+				tools=[agent_tools.cheese_expert_tool],  # Tools available to the model
+				tool_config=types.ToolConfig(
+					function_calling_config=types.FunctionCallingConfig(mode=mode)
 				),
-			],
-			tools=[agent_tools.cheese_expert_tool],
+			),
 		)
-		print("LLM Response:", response)
+		mode = "AUTO"
+		if not response.function_calls:
+			print("LLM Response:", response.text)
+			return
+
+		print("Function calls:")
+		function_responses = agent_tools.execute_function_calls(response.function_calls,collection,embed_func=generate_query_embedding)
+		contents.append(response.candidates[0].content)  # What the LLM asked for
+		contents.append(Content(role="user", parts=function_responses))  # What the tools found
+	print("The agent did not answer within 5 rounds")
 
 
 def download():
@@ -486,11 +480,7 @@ def download():
 	# # https://github.com/dlops-io/datasets/releases/download/v4.0/cheese-books-embeddings.zip
 	packet_url = "https://github.com/dlops-io/datasets/releases/download/v4.0/cheese-books-embeddings.zip"
 	packet_file = os.path.basename(packet_url)
-	with requests.get(packet_url, stream=True, headers=None) as r:
-		r.raise_for_status()
-		with open(os.path.join(OUTPUT_FOLDER, packet_file), "wb") as f:
-			for chunk in r.iter_content(chunk_size=8192):
-				f.write(chunk)
+	urllib.request.urlretrieve(packet_url, os.path.join(OUTPUT_FOLDER, packet_file))
 	with zipfile.ZipFile(os.path.join(OUTPUT_FOLDER, packet_file)) as zfile:
 		zfile.extractall()
 
@@ -524,56 +514,52 @@ def main(args=None):
 
 
 if __name__ == "__main__":
-    # Generate the inputs arguments parser
-    # if you type into the terminal '--help', it will provide the description
-    parser = argparse.ArgumentParser(description="CLI")
+	# Generate the inputs arguments parser
+	# if you type into the terminal '--help', it will provide the description
+	parser = argparse.ArgumentParser(description="CLI")
 
-    try:
-        parser.add_argument(
-            "--chunk",
-            action="store_true",
-            help="Chunk text",
-        )
-        parser.add_argument(
-            "--embed",
-            action="store_true",
-            help="Generate embeddings",
-        )
-        parser.add_argument(
-            "--load",
-            action="store_true",
-            help="Load embeddings to vector db",
-        )
-        parser.add_argument(
-            "--query",
-            action="store_true",
-            help="Query vector db",
-        )
-        parser.add_argument(
-            "--chat",
-            action="store_true",
-            help="Chat with LLM",
-        )
-        parser.add_argument(
-            "--get",
-            action="store_true",
-            help="Get documents from vector db",
-        )
-        parser.add_argument(
-            "--agent",
-            action="store_true",
-            help="Chat with LLM Agent",
-        )
-        parser.add_argument(
-            "--download",
-            action="store_true",
-            help="Download the embeddings",
-        )
-        parser.add_argument("--chunk_type", default="char-split", help="char-split | recursive-split | semantic-split")
+	parser.add_argument(
+		"--chunk",
+		action="store_true",
+		help="Chunk text",
+	)
+	parser.add_argument(
+		"--embed",
+		action="store_true",
+		help="Generate embeddings",
+	)
+	parser.add_argument(
+		"--load",
+		action="store_true",
+		help="Load embeddings to vector db",
+	)
+	parser.add_argument(
+		"--query",
+		action="store_true",
+		help="Query vector db",
+	)
+	parser.add_argument(
+		"--chat",
+		action="store_true",
+		help="Chat with LLM",
+	)
+	parser.add_argument(
+		"--get",
+		action="store_true",
+		help="Get documents from vector db",
+	)
+	parser.add_argument(
+		"--agent",
+		action="store_true",
+		help="Chat with LLM Agent",
+	)
+	parser.add_argument(
+		"--download",
+		action="store_true",
+		help="Download the embeddings",
+	)
+	parser.add_argument("--chunk_type", default="char-split", help="char-split | recursive-split | semantic-split")
 
-        args = parser.parse_args()
+	args = parser.parse_args()
 
-        main(args)
-    except Exception as e:
-        print("Exception:", e)
-        traceback.print_exc()
+	main(args)

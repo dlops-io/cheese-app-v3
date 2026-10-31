@@ -7,7 +7,7 @@ services:
         image: cheese-app-vector-db-cli
         container_name: cheese-app-vector-db-cli
         volumes:
-            - ../../../secrets:/secrets
+            - ../../../secrets:/secrets:ro
             - ../vector-db:/app
         environment:
             GOOGLE_APPLICATION_CREDENTIALS: $GOOGLE_APPLICATION_CREDENTIALS
@@ -17,12 +17,11 @@ services:
         depends_on:
             - chromadb
     chromadb:
-        image: chromadb/chroma:latest
+        image: chromadb/chroma:1.5.9 # the same version as chromadb-client
         container_name: cheese-app-vector-db
         ports:
             - 8000:8000
         volumes:
-            - ./docker-volumes/chromadb:/chroma/chroma
+            - ./docker-volumes/chromadb:/data # where Chroma 1.x keeps its data
         environment:
-            - IS_PERSISTENT=TRUE
             - ANONYMIZED_TELEMETRY=FALSE
