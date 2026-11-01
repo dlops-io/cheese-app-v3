@@ -45,7 +45,7 @@ for service in SERVICES:
         tags=[pulumi.Output.concat(registry_url, "/", name, ":", content_tag(context_path))],
         context=docker_build.BuildContextArgs(location=str(context_path)),
         dockerfile=docker_build.DockerfileArgs(location=str(context_path / "Dockerfile")),
-        platforms=[docker_build.Platform.LINUX_AMD64],  # GKE nodes are amd64
+        platforms=[docker_build.Platform.LINUX_AMD64],  # our VMs and GKE nodes are amd64
         push=True,
         opts=pulumi.ResourceOptions(custom_timeouts=CustomTimeouts(create="30m"), retain_on_delete=True),
     )

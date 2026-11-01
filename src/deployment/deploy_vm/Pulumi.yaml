@@ -1,0 +1,6 @@
+name: cheese-app-vm
+description: One VM running the Cheese App containers - the manual deployment, automated
+runtime:
+  name: python
+  options:
+    virtualenv: /opt/venv
