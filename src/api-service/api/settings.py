@@ -15,6 +15,7 @@ CHROMADB_HOST = os.getenv("CHROMADB_HOST", "cheese-app-vector-db")
 CHROMADB_PORT = int(os.getenv("CHROMADB_PORT", "8000"))
 
 PERSISTENT_DIR = os.getenv("PERSISTENT_DIR", "/persistent")
+CHAT_BUCKET = os.getenv("CHAT_BUCKET", "")  # empty: chats stay in PERSISTENT_DIR, for one API on a laptop
 
 # The trained cheese classifier. Downloaded from Github for easy access; after training, this would
 # come from your own GCS bucket.

@@ -1,0 +1,38 @@
+# The page as static files behind nginx. Two replicas, so it keeps loading whatever happens to a node.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-react
+  labels: { app: frontend-react }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: frontend-react }
+  template:
+    metadata:
+      labels: { app: frontend-react }
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: frontend-react
+          image: cheese-app-frontend-react # pinned by deploy-k8s.sh
+          ports: [{ name: http, containerPort: 80 }]
+          env:
+            - name: API_URL
+              value: http://api-service:9000
+          resources:
+            requests: { cpu: 50m, memory: 32Mi }
+            limits: { memory: 64Mi }
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-react
+spec:
+  selector: { app: frontend-react }
+  ports: [{ name: http, port: 80, targetPort: http }]

@@ -1,49 +1,30 @@
-import pulumi
-import pulumi_gcp as gcp
-from pulumi import StackReference, ResourceOptions, Output
-import pulumi_kubernetes as k8s
+import os
 
-from create_network import create_network
+import pulumi
 from create_cluster import create_cluster
-from setup_containers import setup_containers
-from setup_loadbalancer import setup_loadbalancer
-from setup_loadbalancer_ssl import setup_loadbalancer_ssl
+from create_network import create_network
 
 # Get project info and configuration
-gcp_config = pulumi.Config("gcp")
-project = gcp_config.get("project")
-region = "us-central1"
+project = pulumi.Config("gcp").require("project")
+region = os.environ["GCP_REGION"]
+zone = os.environ["GCP_ZONE"]
 app_name = "cheese-app"
-setupSSL = False
 
 # Create the required network setups
-network, subnet, router, nat = create_network(region, app_name)
+network, subnet, router, nat = create_network(region, f"{app_name}-k8s")
 
-# Create & Setup Cluster
-cluster, namespace, k8s_provider, ksa_name = create_cluster(
-    project, region, network, subnet, app_name
-)
-
-# Setup Containers
-frontend_service, api_service = setup_containers(
-    project, namespace, k8s_provider, ksa_name, app_name
-)
-
-# Setup Load Balancer
-if setupSSL:
-    ip_address, ingress, host = setup_loadbalancer_ssl(
-        namespace, k8s_provider, api_service, frontend_service, app_name
-    )
-else:
-    ip_address, ingress, host = setup_loadbalancer(
-        namespace, k8s_provider, api_service, frontend_service, app_name
-    )
+# Create the cluster and its node pool. deploy_k8s only creates the cluster; the workloads are YAML.
+cluster, node_pool = create_cluster(project, zone, network, subnet, app_name)
 
 # Export values
 pulumi.export("cluster_name", cluster.name)
+pulumi.export("cluster_location", cluster.location)
 pulumi.export("cluster_endpoint", cluster.endpoint)
-pulumi.export("kubeconfig", k8s_provider.kubeconfig)
-pulumi.export("namespace", namespace.metadata.name)
-pulumi.export("ingress_name", ingress.metadata.name)
-pulumi.export("ip_address", ip_address)
-pulumi.export("app_url", host.apply(lambda domain: f"http://{domain}"))
+pulumi.export("master_version", cluster.master_version)
+pulumi.export("node_pool", node_pool.name)
+pulumi.export(
+    "get_credentials",
+    pulumi.Output.concat(
+        "gcloud container clusters get-credentials ", cluster.name, f" --zone {zone} --project {project}"
+    ),
+)

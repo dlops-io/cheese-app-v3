@@ -11,8 +11,7 @@ import uuid
 from collections.abc import Callable
 from typing import Annotated
 
-from fastapi import APIRouter, Header, HTTPException, Path
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Header, HTTPException, Path, Response
 
 from api.utils.chat_utils import ChatHistoryManager, ChatMessage
 
@@ -78,9 +77,9 @@ def create_router(model: str, respond: Callable[[ChatHistoryManager, list[dict],
     @router.get("/images/{chat_id}/{message_id}.png")
     def get_chat_image(chat_id: ChatId, message_id: MessageId):
         """Serve an image from the chat history"""
-        image_path = chat_manager.image_path(chat_id, message_id)
-        if not image_path.exists():
+        image = chat_manager.load_image(chat_manager.image_name(chat_id, message_id))
+        if image is None:
             raise HTTPException(status_code=404, detail="Image not found")
-        return FileResponse(image_path, media_type="image/png")
+        return Response(image, media_type="image/png")
 
     return router

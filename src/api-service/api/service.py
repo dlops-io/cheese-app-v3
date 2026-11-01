@@ -11,6 +11,8 @@ import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse
+from google.api_core.exceptions import GoogleAPIError
 
 from api.routers import chat, newsletter, podcast
 from api.utils import llm_cnn_utils, llm_rag_utils, llm_utils
@@ -26,6 +28,11 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Cheese App API", lifespan=lifespan, docs_url="/api/docs", openapi_url="/api/openapi.json"
 )
+
+
+@app.exception_handler(GoogleAPIError)
+def cloud_storage_failed(request, error: GoogleAPIError):
+    return JSONResponse(status_code=502, content={"detail": f"Cloud Storage: {error}"})
 
 
 @app.get("/api/status")

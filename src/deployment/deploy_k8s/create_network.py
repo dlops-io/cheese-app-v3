@@ -3,13 +3,13 @@ import pulumi_gcp as gcp
 
 
 def create_network(region, app_name):
-    # Create VPC network with manual subnet configuration for the cheese app
+    # Create VPC network with manual subnet configuration
     network = gcp.compute.Network(
         f"{app_name}-vpc",
         name=f"{app_name}-vpc",
         auto_create_subnetworks=False,
         routing_mode="REGIONAL",
-        description="VPC for Kubernetes Cluster",
+        description="VPC for the Cheese App Kubernetes cluster",
     )
 
     # Create subnet within the VPC with private Google access enabled
@@ -20,7 +20,6 @@ def create_network(region, app_name):
         region=region,
         network=network.id,
         private_ip_google_access=True,
-        description="subnet /19 starting after 10.0.0.0/19",
         opts=pulumi.ResourceOptions(depends_on=[network]),
     )
 
@@ -33,7 +32,7 @@ def create_network(region, app_name):
         opts=pulumi.ResourceOptions(depends_on=[network, subnet]),
     )
 
-    # Configure Cloud NAT to allow private instances to access the internet
+    # Configure Cloud NAT so the private nodes can pull public images (Chroma) and reach GitHub
     nat = gcp.compute.RouterNat(
         f"{app_name}-nat",
         name=f"{app_name}-nat",

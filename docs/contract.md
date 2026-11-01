@@ -50,7 +50,7 @@ and the same paths reach the API in production, so nothing strips a prefix and t
 | `400` | The image could not be read |
 | `404` | No such chat or content |
 | `422` | Missing or invalid session ID, or an empty message |
-| `502` | Gemini failed, with its reason in `detail` |
+| `502` | Gemini or Cloud Storage failed, with the reason in `detail` |
 | `503` | The CNN model is still loading, or Chroma is down or empty, with the reason in `detail` |
 
 ## Settings
@@ -64,4 +64,5 @@ Environment variables, read at startup (`api/settings.py`).
 | `GENERATIVE_MODEL` | `gemini-3.8-flash` | The Gemini model |
 | `EMBEDDING_MODEL` | `text-embedding-004` | Must match what `vector-db` loaded with |
 | `CHROMADB_HOST`, `CHROMADB_PORT` | `cheese-app-vector-db`, `8000` | The Chroma server |
-| `PERSISTENT_DIR` | `/persistent` | Chat history and the CNN model |
+| `PERSISTENT_DIR` | `/persistent` | The CNN model, and chat history when `CHAT_BUCKET` is empty |
+| `CHAT_BUCKET` | empty | A Cloud Storage bucket for chat history, so every copy of the API sees the same chats |

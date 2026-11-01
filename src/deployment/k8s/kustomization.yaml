@@ -1,0 +1,16 @@
+# The Cheese App workloads. Apply with ../scripts/deploy-k8s.sh, which adds your project's settings and
+# the images pushed by deploy_images in a generated overlay, then runs `kubectl apply -k`.
+# load-vector-db/ is left out: it runs once per cluster.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: cheese-app
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: cheese-app
+resources:
+  - namespace.yaml
+  - vector-db.yaml
+  - api-service.yaml
+  - hpa.yaml
+  - frontend-react.yaml
+  - gateway.yaml

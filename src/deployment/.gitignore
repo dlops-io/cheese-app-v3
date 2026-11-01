@@ -1,2 +1,7 @@
-/pulumi-*
-*__pycache__/
+# The deployment shell's generated overlays, plugins and Docker login
+.local/
+pulumi-plugins/
+docker-config/
+.venv/
+__pycache__/
+.ruff_cache/

@@ -1,73 +1,56 @@
+FROM python:3.14-slim-trixie@sha256:fa99b65193ea9dbde3fc2367f43d3a2907571ce2a15213a86f0053e1d49d8456
 
+# Every tool that builds images or talks to the cloud, at pinned versions, so Docker is the only
+# thing a laptop needs. Built for the machine it runs on; deploy_images builds the amd64 images.
+ARG TARGETARCH
+ARG KUBECTL_VERSION=v1.37.1
+ARG PULUMI_VERSION=3.272.0
+ARG UV_VERSION=0.13.6
 
-# Use the official Python image as the base with Python 3.13
-FROM python:3.13-slim-bullseye
+ENV DEBIAN_FRONTEND=noninteractive \
+    UV_PROJECT_ENVIRONMENT=/opt/venv \
+    UV_CACHE_DIR=/tmp/cheese-app-uv-cache \
+    PATH=/opt/venv/bin:/usr/local/lib/pulumi:${PATH}
 
-# Set the environment variable for non-interactive installations
-ENV DEBIAN_FRONTEND=noninteractive
-ENV UV_PROJECT_ENVIRONMENT=/home/app/.venv
-
-# Install required dependencies
-RUN apt-get update && \
-    apt-get install -y curl apt-transport-https ca-certificates gnupg lsb-release openssh-client
-
-# Add the Google Cloud SDK repository
-RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | \
-    tee -a /etc/apt/sources.list.d/google-cloud-sdk.list && \
-    curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | \
-    gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
-
-# Docker
-RUN install -m 0755 -d /etc/apt/keyrings
-RUN curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-RUN chmod a+r /etc/apt/keyrings/docker.gpg
-RUN echo "deb [arch="$(dpkg --print-architecture)" signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian \
-    "$(. /etc/os-release && echo "$VERSION_CODENAME")" stable" | \
-    tee /etc/apt/sources.list.d/docker.list > /dev/null
-
-# Install packages
-RUN apt-get update && \
-    apt-get install -y google-cloud-sdk google-cloud-sdk-gke-gcloud-auth-plugin jq docker-ce
-
-# Kubernetes
-ARG K8S_MINOR=1.34
-RUN install -m 0755 -d /etc/apt/keyrings \
-    && curl -fsSL "https://pkgs.k8s.io/core:/stable:/v${K8S_MINOR}/deb/Release.key" \
-    | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg \
-    && chmod 0644 /etc/apt/keyrings/kubernetes-apt-keyring.gpg \
-    && echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v${K8S_MINOR}/deb/ /" \
-    | tee /etc/apt/sources.list.d/kubernetes.list \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends kubectl
-
-# Helm
-RUN curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-
-# Install Pulumi
-RUN curl -fsSL https://get.pulumi.com | sh
-ENV PATH="$PATH:/root/.pulumi/bin"
-
-# Disable Pulumi passphrase prompts
+# Disable Pulumi passphrase prompts. Stack secrets are then protected only by who can read the state
+# (the GCS bucket's IAM); switch to a gcpkms:// secrets provider before storing real ones.
 ENV PULUMI_CONFIG_PASSPHRASE=""
 
-# Install UV (Python package installer)
-RUN pip install uv
-ENV PATH="$PATH:/root/.local/bin"
+RUN case "${TARGETARCH}" in amd64|arm64) ;; *) echo "Unsupported architecture: ${TARGETARCH}" >&2; exit 1 ;; esac
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl gnupg jq shellcheck \
+    && install -m 0755 -d /etc/apt/keyrings \
+    && curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \
+    && chmod a+r /etc/apt/keyrings/docker.asc \
+    && echo "deb [arch=${TARGETARCH} signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian trixie stable" > /etc/apt/sources.list.d/docker.list \
+    && curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | gpg --dearmor -o /etc/apt/keyrings/cloud.google.gpg \
+    && echo "deb [signed-by=/etc/apt/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" > /etc/apt/sources.list.d/google-cloud-sdk.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends docker-ce-cli docker-buildx-plugin \
+        google-cloud-cli google-cloud-cli-gke-gcloud-auth-plugin \
+    && rm -rf /var/lib/apt/lists/*
 
-# Create user
-RUN useradd -ms /bin/bash app -d /home/app -u 1000 -p "$(openssl passwd -1 passw0rd)" && \
-    usermod -aG docker app && \
-    mkdir -p /app && \
-    chown app:app /app
+RUN curl -fsSLo /tmp/kubectl "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${TARGETARCH}/kubectl" \
+    && curl -fsSLo /tmp/kubectl.sha256 "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${TARGETARCH}/kubectl.sha256" \
+    && echo "$(cat /tmp/kubectl.sha256)  /tmp/kubectl" | sha256sum --check \
+    && install -m 0755 /tmp/kubectl /usr/local/bin/kubectl \
+    && rm /tmp/kubectl /tmp/kubectl.sha256
+# Pulumi names amd64 "x64".
+RUN arch="$([ "${TARGETARCH}" = amd64 ] && echo x64 || echo "${TARGETARCH}")" \
+    && tarball="pulumi-v${PULUMI_VERSION}-linux-${arch}.tar.gz" \
+    && base="https://github.com/pulumi/pulumi/releases/download/v${PULUMI_VERSION}" \
+    && cd /tmp \
+    && curl -fsSLO "${base}/${tarball}" \
+    && curl -fsSLO "${base}/pulumi-${PULUMI_VERSION}-checksums.txt" \
+    && grep " ${tarball}\$" "pulumi-${PULUMI_VERSION}-checksums.txt" | sha256sum --check \
+    && tar -xzf "${tarball}" \
+    && mv pulumi /usr/local/lib/pulumi \
+    && rm "${tarball}" "pulumi-${PULUMI_VERSION}-checksums.txt" \
+    && pip install --no-cache-dir "uv==${UV_VERSION}"
 
-# Set the working directory
 WORKDIR /app
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen && rm -rf "${UV_CACHE_DIR}"
 
-# Copy dependency files first for better layer caching
-COPY --chown=app:app pyproject.toml uv.lock* ./
-
-# Install Python dependencies
-RUN uv sync --frozen
-
-# Start a new shell to use the installed SDK
-ENTRYPOINT ["/bin/bash","docker-entrypoint.sh"]
+# The entrypoint runs from the bind-mounted /app, so editing it needs no rebuild
+ENTRYPOINT ["/bin/bash", "./docker-entrypoint.sh"]

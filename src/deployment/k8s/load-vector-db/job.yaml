@@ -1,0 +1,25 @@
+# Loads the cheese books into Chroma, then stops. A Job runs to completion; a Deployment never would.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: load-vector-db
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      containers:
+        - name: load-vector-db
+          image: cheese-app-vector-db-cli # pinned by deploy-k8s.sh
+          args: ["cli.py", "--download", "--load", "--chunk_type", "recursive-split"]
+          env:
+            - name: GCP_PROJECT # read at startup; loading ready-made embeddings makes no Google calls
+              value: unused
+            - name: CHROMADB_HOST
+              value: vector-db
+            - name: CHROMADB_PORT
+              value: "8000"
+          resources:
+            requests: { cpu: 250m, memory: 512Mi }
+            limits: { memory: 1Gi }
