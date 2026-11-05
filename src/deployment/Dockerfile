@@ -1,8 +1,10 @@
 FROM python:3.14-slim-trixie@sha256:fa99b65193ea9dbde3fc2367f43d3a2907571ce2a15213a86f0053e1d49d8456
 
-# Every tool that builds images or talks to the cloud, at pinned versions, so Docker is the only
-# thing a laptop needs. Built for the machine it runs on; deploy_images builds the amd64 images.
+# Every tool that builds images, runs the local cluster or talks to the cloud, at pinned versions, so
+# Docker is the only thing a laptop needs. Built for the machine it runs on, like kind's nodes;
+# deploy_images builds the amd64 images for GCP.
 ARG TARGETARCH
+ARG KIND_VERSION=v0.33.0
 ARG KUBECTL_VERSION=v1.37.1
 ARG PULUMI_VERSION=3.272.0
 ARG UV_VERSION=0.13.6
@@ -35,6 +37,13 @@ RUN curl -fsSLo /tmp/kubectl "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/l
     && echo "$(cat /tmp/kubectl.sha256)  /tmp/kubectl" | sha256sum --check \
     && install -m 0755 /tmp/kubectl /usr/local/bin/kubectl \
     && rm /tmp/kubectl /tmp/kubectl.sha256
+# kind runs a Kubernetes cluster on this laptop, each node a container on the laptop's Docker
+RUN cd /tmp \
+    && curl -fsSLO "https://github.com/kubernetes-sigs/kind/releases/download/${KIND_VERSION}/kind-linux-${TARGETARCH}" \
+    && curl -fsSLO "https://github.com/kubernetes-sigs/kind/releases/download/${KIND_VERSION}/kind-linux-${TARGETARCH}.sha256sum" \
+    && sha256sum --check "kind-linux-${TARGETARCH}.sha256sum" \
+    && install -m 0755 "kind-linux-${TARGETARCH}" /usr/local/bin/kind \
+    && rm kind-linux-*
 # Pulumi names amd64 "x64".
 RUN arch="$([ "${TARGETARCH}" = amd64 ] && echo x64 || echo "${TARGETARCH}")" \
     && tarball="pulumi-v${PULUMI_VERSION}-linux-${arch}.tar.gz" \

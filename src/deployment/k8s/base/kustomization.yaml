@@ -1,0 +1,18 @@
+# The Cheese App workloads, the same on every cluster. Each cluster adds its own pieces on top:
+#   ../gke/   the Gateway, Google's load balancer. ../../scripts/deploy-k8s.sh adds your project's
+#             settings and the images pushed by deploy_images, then runs `kubectl apply -k`.
+#   ../kind/  a stand-in for Cloud Storage, the API's key and a port on your laptop:
+#             ../../scripts/deploy-kind.sh
+# ../load-vector-db/ is left out: it runs once per cluster.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: cheese-app
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: cheese-app
+resources:
+  - namespace.yaml
+  - vector-db.yaml
+  - api-service.yaml
+  - hpa.yaml
+  - frontend-react.yaml

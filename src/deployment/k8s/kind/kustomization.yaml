@@ -1,0 +1,39 @@
+# The workloads on kind, the cluster on your laptop: everything in base/, plus what GKE would give us.
+#   - Cloud Storage: chat-storage.yaml, a stand-in that the API's Cloud Storage code talks to unchanged
+#   - Workload Identity: your ml-workflow.json, as the Secret gcp-key (deploy-kind.sh creates it)
+#   - A load balancer: the frontend on a port of every node, which kind.yaml maps to localhost:8090
+# Apply with ../../scripts/deploy-kind.sh, which also builds the images and loads them into the nodes.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: cheese-app
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: cheese-app
+resources:
+  - ../base
+  - chat-storage.yaml
+# Built on this laptop and copied into the nodes by `kind load`, so there is no registry
+images:
+  - name: cheese-app-api-service
+    newTag: local
+  - name: cheese-app-frontend-react
+    newTag: local
+configMapGenerator:
+  - name: api-config
+    behavior: merge
+    literals:
+      - CHAT_BUCKET=cheese-app-chats
+      # The Cloud Storage library sends every call here instead of to Google
+      - STORAGE_EMULATOR_HOST=http://chat-storage:4443
+generatorOptions:
+  disableNameSuffixHash: true
+patches:
+  - path: api-service-patch.yaml
+  - target: { kind: Service, name: frontend-react }
+    patch: |
+      - op: add
+        path: /spec/type
+        value: NodePort
+      - op: add
+        path: /spec/ports/0/nodePort
+        value: 30090

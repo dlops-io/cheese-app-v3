@@ -26,7 +26,10 @@ else
     docker build -t $IMAGE_NAME -f Dockerfile .
 
     # Run the container
+    # --network host: kind's kubeconfig points at 127.0.0.1 on the Docker host
+    # The Docker socket: kind's nodes and the image builds run on the laptop's Docker
     docker run --rm --name $IMAGE_NAME -ti \
+    --network host \
     -v /var/run/docker.sock:/var/run/docker.sock \
     -v "$BASE_DIR":/app \
     -v "$SECRETS_DIR":/secrets:ro \
