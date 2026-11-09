@@ -1,15 +1,18 @@
 [project]
-name = "app"
-version = "0.1.0"
-description = "Add your description here"
-readme = "README.md"
-requires-python = ">=3.12"
+name = "cheese-app-vector-db"
+version = "3.0.0"
+description = "Chunks the cheese books, embeds them and loads them into Chroma"
+requires-python = ">=3.13,<3.14"
 dependencies = [
-    "chromadb>=1.1.0",
-    "google-genai>=1.39.1",
-    "langchain>=0.3.27",
-    "langchain-community>=0.3.30",
-    "openai>=1.95.1",
-    "openai-agents>=0.3.2",
+    "chromadb-client>=1.5.9",
+    "google-genai>=1.47.0",
+    "langchain-core>=1.7.3",
+    "langchain-text-splitters>=1.1.3",
+    "numpy>=2.1.3",
     "pandas>=2.3.3",
 ]
+
+# A command-line tool, not a library: install the dependencies only, never build a wheel of this project.
+[tool.uv]
+package = false
+environments = ["sys_platform == 'linux'"]

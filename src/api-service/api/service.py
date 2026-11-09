@@ -1,50 +1,63 @@
-import os
-from fastapi import FastAPI
-from starlette.middleware.cors import CORSMiddleware
+"""Cheese App API. Everything the browser calls is under /api; the probes stay at the root.
 
-from api.routers import newsletter, podcast
+/api/newsletters, /api/podcasts      content
+/api/llm, /api/llm-cnn, /api/llm-rag chat, one router per mode (see routers/chat.py)
+/api/docs                            FastAPI's interactive docs
+/healthz                             liveness: the process is up
+/readyz                              readiness: the CNN model is loaded and Chroma answers
+"""
 
-from api.routers import llm_chat, llm_cnn_chat
-from api.routers import llm_rag_chat, llm_agent_chat
+import threading
+from contextlib import asynccontextmanager
 
-# from api.routers import test_router
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse
+from google.api_core.exceptions import GoogleAPIError
 
-# Set root_path based on environment
-ROOT_PATH = os.getenv("ROOT_PATH", "")
+from api.routers import chat, newsletter, podcast
+from api.utils import llm_cnn_utils, llm_rag_utils, llm_utils
 
-# Setup FastAPI app
-api_app = FastAPI(title="API Server", description="API Server", version="v1")
 
-# Enable CORSMiddleware
-api_app.add_middleware(
-    CORSMiddleware,
-    allow_credentials=False,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # In the background, so the API answers while the model loads; /readyz says when it is done
+    threading.Thread(target=llm_cnn_utils.load_cnn_model, daemon=True).start()
+    yield
+
+
+app = FastAPI(
+    title="Cheese App API", lifespan=lifespan, docs_url="/api/docs", openapi_url="/api/openapi.json"
 )
 
 
-# Routes
-@api_app.get("/")
-async def get_index():
-    return {"message": "Welcome to AC215"}
+@app.exception_handler(GoogleAPIError)
+def cloud_storage_failed(request, error: GoogleAPIError):
+    return JSONResponse(status_code=502, content={"detail": f"Cloud Storage: {error}"})
 
 
-@api_app.get("/status")
-async def get_api_status():
-    return {"version": "3.0"}
+@app.get("/api/status")
+def get_status():
+    return {"version": "3.0.0"}
 
 
-# Additional routers here
-api_app.include_router(newsletter.router, prefix="/newsletters")
-api_app.include_router(podcast.router, prefix="/podcasts")
-api_app.include_router(llm_chat.router, prefix="/llm")
-api_app.include_router(llm_cnn_chat.router, prefix="/llm-cnn")
-api_app.include_router(llm_rag_chat.router, prefix="/llm-rag")
-api_app.include_router(llm_agent_chat.router, prefix="/llm-agent")
-# app.include_router(test_router.router, prefix="/test")
+app.include_router(newsletter.router, prefix="/api/newsletters")
+app.include_router(podcast.router, prefix="/api/podcasts")
+app.include_router(chat.create_router("llm", llm_utils.respond), prefix="/api/llm")
+app.include_router(chat.create_router("llm-cnn", llm_cnn_utils.respond), prefix="/api/llm-cnn")
+app.include_router(chat.create_router("llm-rag", llm_rag_utils.respond), prefix="/api/llm-rag")
 
-# Mount your API under ROOT-PATH to match the Ingress rule
-app = FastAPI(title="API Server", description="API Server", version="v1")
-app.mount(ROOT_PATH, api_app)
+
+@app.get("/healthz")
+def healthz():
+    return {"ok": True}
+
+
+@app.get("/readyz")
+def readyz():
+    if llm_cnn_utils.cnn_model is None:
+        raise HTTPException(503, "CNN model is loading")
+    try:
+        llm_rag_utils.chroma_client().heartbeat()
+    except Exception as e:  # noqa: BLE001 - whatever went wrong, this pod is not ready
+        raise HTTPException(503, f"Chroma: {e}")
+    return {"ok": True}

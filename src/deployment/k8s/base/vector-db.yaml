@@ -1,0 +1,48 @@
+# Chroma: the one piece that holds data on a disk, so it is a StatefulSet with one replica. A
+# Deployment's rolling update would start the new pod while the old one still holds the disk, and a
+# ReadWriteOnce disk can only attach to one node at a time.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: vector-db
+  labels: { app: vector-db }
+spec:
+  serviceName: vector-db
+  replicas: 1
+  selector:
+    matchLabels: { app: vector-db }
+  template:
+    metadata:
+      labels: { app: vector-db }
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: vector-db
+          image: chromadb/chroma:1.5.9 # the same version as chromadb-client
+          ports: [{ name: http, containerPort: 8000 }]
+          env:
+            - name: ANONYMIZED_TELEMETRY
+              value: "FALSE"
+          resources:
+            requests: { cpu: 250m, memory: 512Mi }
+            limits: { memory: 1Gi }
+          readinessProbe:
+            httpGet: { path: /api/v2/heartbeat, port: http }
+            periodSeconds: 5
+          volumeMounts:
+            - { name: data, mountPath: /data } # where Chroma 1.x keeps its data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests: { storage: 5Gi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vector-db # the name the API and the loader call: http://vector-db:8000
+spec:
+  selector: { app: vector-db }
+  ports: [{ name: http, port: 8000, targetPort: http }]

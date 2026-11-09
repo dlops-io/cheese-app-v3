@@ -1,74 +1,54 @@
-import os
+import hashlib
+from pathlib import Path
+
 import pulumi
 import pulumi_docker_build as docker_build
-from pulumi_gcp import artifactregistry
 from pulumi import CustomTimeouts
-import datetime
 
-# 🔧 Get project info
-project = pulumi.Config("gcp").require("project")
-location = os.environ["GCP_REGION"]
+# The registry comes from the long-lived base stack
+base = pulumi.StackReference(f"organization/cheese-app-base/{pulumi.get_stack()}")
+registry_url = base.require_output("registry")
 
-# 🕒 Timestamp for tagging
-timestamp_tag = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-repository_name = "cheese-app-repository"
-registry_url = f"us-docker.pkg.dev/{project}/{repository_name}"
-
-# Docker Build + Push -> API Service
-image_config = {
-    "image_name": "cheese-app-api-service",
-    "context_path": "../../api-service",
-    "dockerfile": "Dockerfile"
+# Each image's folder; its production Dockerfile sits there
+SERVICES = ["api-service", "frontend-react", "vector-db"]
+# Never part of an image (and the same as the services' .dockerignore files)
+SKIP = {
+    ".git",
+    ".venv",
+    "node_modules",
+    "dist",
+    "__pycache__",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".DS_Store",
+    "docker-volumes",
+    "outputs",
 }
-api_service_image = docker_build.Image(
-    f"build-{image_config["image_name"]}",
-    tags=[pulumi.Output.concat(registry_url, "/", image_config["image_name"], ":", timestamp_tag)],
-    context=docker_build.BuildContextArgs(location=image_config["context_path"]),
-    dockerfile={"location": f"{image_config["context_path"]}/{image_config["dockerfile"]}"},
-    platforms=[docker_build.Platform.LINUX_AMD64],
-    push=True,
-    opts=pulumi.ResourceOptions(custom_timeouts=CustomTimeouts(create="30m"),
-                                retain_on_delete=True)
-)
-# Export references to stack
-pulumi.export("cheese-app-api-service-ref", api_service_image.ref)
-pulumi.export("cheese-app-api-service-tags", api_service_image.tags)
 
-# Docker Build + Push -> Frontend
-image_config = {
-    "image_name": "cheese-app-frontend-react",
-    "context_path": "../../frontend-react",
-    "dockerfile": "Dockerfile"
-}
-frontend_image = docker_build.Image(
-    f"build-{image_config["image_name"]}",
-    tags=[pulumi.Output.concat(registry_url, "/", image_config["image_name"], ":", timestamp_tag)],
-    context=docker_build.BuildContextArgs(location=image_config["context_path"]),
-    dockerfile={"location": f"{image_config["context_path"]}/{image_config["dockerfile"]}"},
-    platforms=[docker_build.Platform.LINUX_AMD64],
-    push=True,
-    opts=pulumi.ResourceOptions(custom_timeouts=CustomTimeouts(create="30m"),
-                                retain_on_delete=True)
-)
-pulumi.export("cheese-app-frontend-react-ref", frontend_image.ref)
-pulumi.export("cheese-app-frontend-react-tags", frontend_image.tags)
 
-# Docker Build + Push -> vector-db-cli
-image_config = {
-    "image_name": "cheese-app-vector-db-cli",
-    "context_path": "../../vector-db",
-    "dockerfile": "Dockerfile"
-}
-frontend_image = docker_build.Image(
-    f"build-{image_config["image_name"]}",
-    tags=[pulumi.Output.concat(registry_url, "/", image_config["image_name"], ":", timestamp_tag)],
-    context=docker_build.BuildContextArgs(location=image_config["context_path"]),
-    dockerfile={"location": f"{image_config["context_path"]}/{image_config["dockerfile"]}"},
-    platforms=[docker_build.Platform.LINUX_AMD64],
-    push=True,
-    opts=pulumi.ResourceOptions(custom_timeouts=CustomTimeouts(create="30m"),
-                                retain_on_delete=True)
-)
-# Export references to stack
-pulumi.export("cheese-app-vector-db-cli-ref", frontend_image.ref)
-pulumi.export("cheese-app-vector-db-cli-tags", frontend_image.tags)
+def content_tag(context: Path) -> str:
+    """A tag from the service's files: unchanged code keeps its tag (and running pods), any change gets a
+    new one. A timestamp would roll every pod on every `pulumi up`, a git commit would miss local edits."""
+    digest = hashlib.sha256()
+    for path in sorted(context.rglob("*")):
+        if path.is_file() and not SKIP.intersection(path.relative_to(context).parts):
+            digest.update(str(path.relative_to(context)).encode() + b"\0" + path.read_bytes() + b"\0")
+    return digest.hexdigest()[:12]
+
+
+for service in SERVICES:
+    # ../../<service> is the service's mount in the deployment container (/api-service, ...)
+    context_path = Path("../..") / service
+    name = "cheese-app-vector-db-cli" if service == "vector-db" else f"cheese-app-{service}"
+    image = docker_build.Image(
+        f"build-{name}",
+        tags=[pulumi.Output.concat(registry_url, "/", name, ":", content_tag(context_path))],
+        context=docker_build.BuildContextArgs(location=str(context_path)),
+        dockerfile=docker_build.DockerfileArgs(location=str(context_path / "Dockerfile")),
+        platforms=[docker_build.Platform.LINUX_AMD64],  # our VMs and GKE nodes are amd64
+        push=True,
+        opts=pulumi.ResourceOptions(custom_timeouts=CustomTimeouts(create="30m"), retain_on_delete=True),
+    )
+    # Export references to stack: the digest-pinned ref is what the workloads deploy
+    key = "vector_db_cli" if service == "vector-db" else service.replace("-", "_")
+    pulumi.export(f"{key}_ref", image.ref)

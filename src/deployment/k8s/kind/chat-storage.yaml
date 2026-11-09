@@ -1,0 +1,45 @@
+# A stand-in for Cloud Storage, for the chats. On GKE every copy of the API shares one bucket; here
+# they share this. Without it, each pod would keep its own chats, and they would seem to vanish as
+# soon as the autoscaler adds a pod. The chats are kept in memory, so they last as long as this pod.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chat-storage
+  labels: { app: chat-storage }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: chat-storage }
+  template:
+    metadata:
+      labels: { app: chat-storage }
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: chat-storage
+          image: fsouza/fake-gcs-server:1.56.1
+          # Every folder in /data becomes a bucket when it starts: here the one CHAT_BUCKET names
+          command: ["sh", "-c"]
+          args:
+            - mkdir -p /data/cheese-app-chats &&
+              exec /bin/fake-gcs-server -scheme http -port 4443 -backend memory -data /data
+          ports: [{ name: http, containerPort: 4443 }]
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { memory: 512Mi }
+          readinessProbe:
+            httpGet: { path: /storage/v1/b, port: http }
+            periodSeconds: 5
+          volumeMounts:
+            - { name: data, mountPath: /data }
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: chat-storage
+spec:
+  selector: { app: chat-storage }
+  ports: [{ name: http, port: 4443, targetPort: http }]

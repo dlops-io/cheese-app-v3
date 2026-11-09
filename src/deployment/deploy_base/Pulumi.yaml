@@ -1,0 +1,6 @@
+name: cheese-app-base
+description: Long-lived pieces that outlive the cluster - the static IP, the image registry and the chats
+runtime:
+  name: python
+  options:
+    virtualenv: /opt/venv

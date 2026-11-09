@@ -1,23 +1,19 @@
 #!/bin/bash
-
-# exit immediately if a command exits with a non-zero status
-#set -e
+# shellcheck disable=SC2155  # export VAR=$(pwd) is this script's style
 
 # Define some environment variables
 export IMAGE_NAME="cheese-app-deployment"
 export BASE_DIR=$(pwd)
 export SECRETS_DIR=$(pwd)/../../../secrets/
-export SSH_DIR=$(pwd)/../../../secrets/
-# export SECRETS_DIR=$(pwd)/../../../secrets/ac215-project/
-# export SSH_DIR=$(pwd)/../../../secrets/ac215-project/
 export GCP_PROJECT="ac215-project" # Change to your GCP Project
 export GCP_REGION="us-central1"
 export GCP_ZONE="us-central1-a"
 export GOOGLE_APPLICATION_CREDENTIALS=/secrets/deployment.json
 export PULUMI_BUCKET="gs://$GCP_PROJECT-pulumi-state-bucket"
 
-# Create local Pulumi plugins directory if it doesn't exist
-mkdir -p $BASE_DIR/pulumi-plugins
+# Create local Pulumi plugins and Docker config directories if they don't exist
+# (a folder, not a single config.json: docker login and gcloud replace that file by renaming over it)
+mkdir -p "$BASE_DIR/pulumi-plugins" "$BASE_DIR/docker-config"
 
 # Check if container is already running
 if docker ps --format "table {{.Names}}" | grep -q "^${IMAGE_NAME}$"; then
@@ -26,23 +22,23 @@ if docker ps --format "table {{.Names}}" | grep -q "^${IMAGE_NAME}$"; then
 else
     echo "Container '${IMAGE_NAME}' is not running. Building and starting new container..."
 
-    # Build the image based on the Dockerfile
-    #docker build -t $IMAGE_NAME -f Dockerfile .
-    docker build -t $IMAGE_NAME --platform=linux/amd64 -f Dockerfile .
+    # Build the image based on the Dockerfile, for this machine's architecture (no emulation)
+    docker build -t $IMAGE_NAME -f Dockerfile .
 
     # Run the container
+    # --network host: kind's kubeconfig points at 127.0.0.1 on the Docker host
+    # The Docker socket: kind's nodes and the image builds run on the laptop's Docker
     docker run --rm --name $IMAGE_NAME -ti \
+    --network host \
     -v /var/run/docker.sock:/var/run/docker.sock \
     -v "$BASE_DIR":/app \
-    -v "$SECRETS_DIR":/secrets \
-    -v "$SSH_DIR/.ssh":/home/app/.ssh:ro \
-    -v "$(pwd)/docker_config.json":/root/.docker/config.json \
+    -v "$SECRETS_DIR":/secrets:ro \
+    -v "$(pwd)/docker-config":/root/.docker \
     -v "$(pwd)/pulumi-plugins":/root/.pulumi/plugins \
     -v "$BASE_DIR/../api-service":/api-service \
     -v "$BASE_DIR/../frontend-react":/frontend-react \
     -v "$BASE_DIR/../vector-db":/vector-db \
     -e GOOGLE_APPLICATION_CREDENTIALS=$GOOGLE_APPLICATION_CREDENTIALS \
-    -e USE_GKE_GCLOUD_AUTH_PLUGIN=True \
     -e GCP_PROJECT=$GCP_PROJECT \
     -e GCP_REGION=$GCP_REGION \
     -e GCP_ZONE=$GCP_ZONE \

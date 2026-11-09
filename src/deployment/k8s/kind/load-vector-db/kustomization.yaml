@@ -1,0 +1,9 @@
+# The books Job on kind: the image built on this laptop
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: cheese-app
+resources:
+  - ../../load-vector-db
+images:
+  - name: cheese-app-vector-db-cli
+    newTag: local

@@ -1,10 +1,6 @@
-name: deploy-k8s
-description: A Python program to deploy a containerized service to Google Cloud on Kubernetes clusters
+name: cheese-app-k8s
+description: The GKE cluster - a VPC with Cloud NAT, private nodes and Workload Identity
 runtime:
   name: python
   options:
-    toolchain: uv
-config:
-  pulumi:tags:
-    value:
-      pulumi:template: python
+    virtualenv: /opt/venv

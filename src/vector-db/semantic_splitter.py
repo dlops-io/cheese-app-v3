@@ -5,9 +5,6 @@ import re
 from typing import Any, Dict, Iterable, List, Literal, Optional, Sequence, Tuple, cast
 
 import numpy as np
-from langchain_community.utils.math import (
-    cosine_similarity,
-)
 from langchain_core.documents import BaseDocumentTransformer, Document
 # from langchain_core.embeddings import Embeddings
 
@@ -68,7 +65,9 @@ def calculate_cosine_distances(sentences: List[dict]) -> Tuple[List[float], List
         embedding_next = sentences[i + 1]["combined_sentence_embedding"]
 
         # Calculate cosine similarity
-        similarity = cosine_similarity([embedding_current], [embedding_next])[0][0]
+        similarity = np.dot(embedding_current, embedding_next) / (
+            np.linalg.norm(embedding_current) * np.linalg.norm(embedding_next)
+        )
 
         # Convert to cosine distance
         distance = 1 - similarity

@@ -1,159 +1,113 @@
-import json
-import os
-from typing import Dict, List, Optional
-import glob
 import base64
-import traceback
+import json
+from functools import cache
+from pathlib import Path
+
+from fastapi import HTTPException
+from google.api_core.exceptions import NotFound
+from google.cloud import storage
 from pydantic import BaseModel, Field
 
-persistent_dir = "/persistent"
+from api import settings
 
 
 class ChatMessage(BaseModel):
-    content: Optional[str] = Field(None, description="The message content")
-    image: Optional[str] = Field(None, description="The image content")
-    message_id: Optional[str] = Field(None, description="The message id")
-    role: Optional[str] = Field(None, description="The role")
+    content: str | None = Field(None, description="The message content")
+    image: str | None = Field(None, description="The image content")
+
+
+def decode_image(image: str) -> bytes:
+    """A base64 image, with or without its `data:image/...;base64,` prefix, as bytes"""
+    try:
+        return base64.b64decode(image.split(",", 1)[-1], validate=True)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Image processing failed: {e}")
+
+
+class LocalStorage:
+    """Files in a folder: one API on one laptop."""
+
+    def __init__(self, root: str):
+        self.root = Path(root)
+
+    def read(self, path: str) -> bytes | None:
+        file = self.root / path
+        return file.read_bytes() if file.exists() else None
+
+    def write(self, path: str, data: bytes) -> None:
+        file = self.root / path
+        file.parent.mkdir(parents=True, exist_ok=True)
+        file.write_bytes(data)
+
+    def list(self, folder: str) -> list[str]:
+        return [str(file.relative_to(self.root)) for file in (self.root / folder).glob("*.json")]
+
+
+class GcsStorage:
+    """Objects in a Cloud Storage bucket: every copy of the API sees the same chats, and they outlive
+    the pods and the cluster."""
+
+    def __init__(self, bucket: str):
+        self.bucket = storage.Client().bucket(bucket)
+
+    def read(self, path: str) -> bytes | None:
+        try:
+            return self.bucket.blob(path).download_as_bytes()
+        except NotFound:
+            return None
+
+    def write(self, path: str, data: bytes) -> None:
+        self.bucket.blob(path).upload_from_string(data)
+
+    def list(self, folder: str) -> list[str]:
+        blobs = self.bucket.client.list_blobs(self.bucket, prefix=f"{folder}/", delimiter="/")
+        return [blob.name for blob in blobs if blob.name.endswith(".json")]
+
+
+@cache
+def chat_storage() -> LocalStorage | GcsStorage:
+    """Connect on first use. Set CHAT_BUCKET to keep chats in Cloud Storage."""
+    if settings.CHAT_BUCKET:
+        return GcsStorage(settings.CHAT_BUCKET)
+    return LocalStorage(settings.PERSISTENT_DIR)
 
 
 class ChatHistoryManager:
-    def __init__(self, model, history_dir: str = "chat-history"):
-        """Initialize the chat history manager with the specified directory"""
-        self.model = model
-        self.history_dir = os.path.join(persistent_dir, history_dir, model)
-        self.images_dir = os.path.join(self.history_dir, "images")
-        self._ensure_directories()
+    """Keeps each chat as JSON, and its images next to it."""
 
-    def _ensure_directories(self) -> None:
-        """Ensure the chat history directory exists"""
-        os.makedirs(self.history_dir, exist_ok=True)
-        os.makedirs(self.images_dir, exist_ok=True)
+    def __init__(self, model: str, history_dir: str = "chat-history"):
+        self.history_dir = f"{history_dir}/{model}"
 
-    def _get_chat_filepath(self, chat_id: str, session_id: str) -> str:
-        """Get the full file path for a chat JSON file"""
-        return os.path.join(self.history_dir, session_id, f"{chat_id}.json")
+    def _chat_path(self, chat_id: str, session_id: str) -> str:
+        return f"{self.history_dir}/{session_id}/{chat_id}.json"
 
-    def _save_image(self, chat_id: str, message_id: str, image_data: str) -> str:
-        """
-        Save image data to a file and return the relative path.
+    def image_name(self, chat_id: str, message_id: str) -> str:
+        """An image's path relative to the chat history: this is what a saved message keeps"""
+        return f"images/{chat_id}/{message_id}.png"
 
-        Args:
-            chat_id: The chat ID
-            message_id: The message ID
-            image_data: Base64 encoded image data
+    def load_image(self, image_name: str) -> bytes | None:
+        return chat_storage().read(f"{self.history_dir}/{image_name}")
 
-        Returns:
-            str: Relative path to the saved image
-        """
-        # Create chat-specific image directory
-        chat_images_dir = os.path.join(self.images_dir, chat_id)
-        os.makedirs(chat_images_dir, exist_ok=True)
+    def save_chat(self, chat: dict, session_id: str) -> None:
+        """Save a chat. Images are saved separately and replaced by their path."""
+        for message in chat["messages"]:
+            if message.get("image"):
+                image_name = self.image_name(chat["chat_id"], message["message_id"])
+                chat_storage().write(f"{self.history_dir}/{image_name}", decode_image(message["image"]))
+                message["image_path"] = image_name
+            message.pop("image", None)
 
-        # Save image to file
-        image_path = os.path.join(chat_images_dir, f"{message_id}.png")
-        try:
-            # Extract the actual base64 data and mime type
-            base64_string = image_data
-            if "," in base64_string:
-                header, base64_data = base64_string.split(",", 1)
-                mime_type = header.split(":")[1].split(";")[0]
-            else:
-                base64_data = base64_string
-                mime_type = "image/jpeg"  # default to JPEG if no header
+        data = json.dumps(chat, indent=2, ensure_ascii=False).encode("utf-8")
+        chat_storage().write(self._chat_path(chat["chat_id"], session_id), data)
 
-            # Decode base64 to bytes
-            image_bytes = base64.b64decode(base64_data)
+    def get_chat(self, chat_id: str, session_id: str) -> dict | None:
+        """Get a specific chat by ID, or None if there is no such chat"""
+        data = chat_storage().read(self._chat_path(chat_id, session_id))
+        return json.loads(data) if data else None
 
-            with open(image_path, "wb") as f:
-                f.write(image_bytes)
-
-            # Return relative path from chat history root
-            return os.path.relpath(image_path, self.history_dir)
-        except Exception as e:
-            print(f"Error saving image: {str(e)}")
-            traceback.print_exc()
-            return ""
-
-    def _load_image(self, relative_path: str) -> Optional[str]:
-        """
-        Load image data from file and return as base64.
-
-        Args:
-            relative_path: Relative path to the image from chat history root
-
-        Returns:
-            Optional[str]: Base64 encoded image data or None if loading fails
-        """
-        full_path = os.path.join(self.history_dir, relative_path)
-        try:
-            if os.path.exists(full_path):
-                with open(full_path, "rb") as f:
-                    image_bytes = f.read()
-                return base64.b64encode(image_bytes).decode("utf-8")
-        except Exception as e:
-            print(f"Error loading image: {str(e)}")
-            traceback.print_exc()
-        return None
-
-    def save_chat(self, chat_to_save: Dict, session_id: str) -> None:
-        """Save a chat to both memory and file, handling images separately"""
-        chat_dir = os.path.join(self.history_dir, session_id)
-        os.makedirs(chat_dir, exist_ok=True)
-
-        # Process messages to save images separately
-        for message in chat_to_save["messages"]:
-            if "image" in message and message["image"] is not None:
-                # print("image:",message["image"])
-                # Save image and replace with path
-                image_path = self._save_image(
-                    chat_to_save["chat_id"], message["message_id"], message["image"]
-                )
-                if image_path:
-                    message["image_path"] = image_path
-                del message["image"]
-
-        # Save chat data
-        filepath = self._get_chat_filepath(chat_to_save["chat_id"], session_id)
-        try:
-            with open(filepath, "w", encoding="utf-8") as f:
-                json.dump(chat_to_save, f, indent=2, ensure_ascii=False)
-        except Exception as e:
-            print(f"Error saving chat {chat_to_save['chat_id']}: {str(e)}")
-            traceback.print_exc()
-            raise e
-
-    def get_chat(self, chat_id: str, session_id: str) -> Optional[Dict]:
-        """Get a specific chat by ID"""
-        filepath = os.path.join(self.history_dir, session_id, f"{chat_id}.json")
-        chat_data = {}
-        try:
-            with open(filepath, "r", encoding="utf-8") as f:
-                chat_data = json.load(f)
-        except Exception as e:
-            print(f"Error loading chat history from {filepath}: {str(e)}")
-            traceback.print_exc()
-        return chat_data
-
-    def get_recent_chats(
-        self, session_id: str, limit: Optional[int] = None
-    ) -> List[Dict]:
-        """Get recent chats, optionally limited to a specific number"""
-        chat_dir = os.path.join(self.history_dir, session_id)
-        os.makedirs(chat_dir, exist_ok=True)
-        recent_chats = []
-        chat_files = glob.glob(os.path.join(chat_dir, "*.json"))
-        for filepath in chat_files:
-            try:
-                with open(filepath, "r", encoding="utf-8") as f:
-                    chat_data = json.load(f)
-                    recent_chats.append(chat_data)
-            except Exception as e:
-                print(f"Error loading chat history from {filepath}: {str(e)}")
-                traceback.print_exc()
-
-        # Sort by dts
-        recent_chats.sort(key=lambda x: x.get("dts", 0), reverse=True)
-        if limit:
-            return recent_chats[:limit]
-
-        return recent_chats
+    def get_recent_chats(self, session_id: str, limit: int | None = None) -> list[dict]:
+        """Get recent chats, newest first, optionally limited to a specific number"""
+        paths = chat_storage().list(f"{self.history_dir}/{session_id}")
+        chats = [json.loads(chat_storage().read(path)) for path in paths]
+        chats.sort(key=lambda chat: chat.get("dts", 0), reverse=True)
+        return chats[:limit] if limit else chats

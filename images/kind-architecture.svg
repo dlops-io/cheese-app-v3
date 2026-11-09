@@ -1,0 +1,125 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 540" width="1000" height="540" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title>Cheese App on kind</title>
+  <desc>The browser opens localhost:8090, which kind maps to the frontend-react Service on port 30090 of every node. nginx serves the page and forwards /api to api-service, which the autoscaler runs as 2 to 6 pods. The API searches the cheese books in vector-db, a Chroma StatefulSet with its own disk, saves chats in chat-storage, which stands in for Cloud Storage, and calls Gemini on Vertex AI with your key file from the Secret gcp-key. The load-vector-db Job loads the books into vector-db once, then stops.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#4b5563"/>
+    </marker>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0f172a" flood-opacity="0.08"/>
+    </filter>
+    <style>
+      .title { font-size: 17px; font-weight: 700; fill: #1f2937; }
+      .sub { font-size: 13px; fill: #6b7280; }
+      .badge { font-size: 12px; font-weight: 700; fill: #ffffff; }
+      .label { font-size: 13px; fill: #374151; }
+      .group { font-size: 13px; font-weight: 700; }
+      .node { fill: #ffffff; stroke: #d6dbe1; stroke-width: 1.2; }
+      .line { fill: none; stroke: #4b5563; stroke-width: 1.8; }
+      .once { fill: none; stroke: #4b5563; stroke-width: 1.8; stroke-dasharray: 6 5; }
+    </style>
+  </defs>
+
+  <!-- The card, so the picture reads the same on a light or a dark page -->
+  <rect x="1" y="1" width="998" height="538" rx="18" fill="#ffffff" stroke="#e5e7eb"/>
+
+  <!-- The kind cluster -->
+  <rect x="222" y="30" width="522" height="480" rx="16" fill="#f3f6fd" stroke="#a8bff0" stroke-width="1.5" stroke-dasharray="7 5"/>
+  <text x="242" y="56" class="group" fill="#326ce5">kind cluster · 3 nodes on your laptop · namespace cheese-app</text>
+
+  <!-- Google Cloud, outside the laptop -->
+  <rect x="764" y="30" width="212" height="200" rx="16" fill="#f8f9fa" stroke="#c4c9d0" stroke-width="1.5" stroke-dasharray="7 5"/>
+  <text x="784" y="56" class="group" fill="#4b5563">Google Cloud</text>
+  <text x="784" y="180" class="sub">with your key file, from</text>
+  <text x="784" y="198" class="sub">the Secret gcp-key</text>
+
+  <!-- Arrows, drawn first so the boxes sit on top -->
+  <path class="line" d="M194 115 H252" marker-end="url(#arrow)"/>
+
+  <path class="line" d="M454 115 H518" marker-end="url(#arrow)"/>
+  <text x="486" y="104" class="label" text-anchor="middle">/api</text>
+
+  <path class="line" d="M730 115 H774" marker-end="url(#arrow)"/>
+
+  <path class="line" d="M560 150 V200 H354 V248" marker-end="url(#arrow)"/>
+  <text x="457" y="192" class="label" text-anchor="middle">saves chats</text>
+
+  <path class="line" d="M680 150 V248" marker-end="url(#arrow)"/>
+  <text x="670" y="232" class="label" text-anchor="end">searches</text>
+
+  <path class="once" d="M625 410 V322" marker-end="url(#arrow)"/>
+  <text x="615" y="372" class="label" text-anchor="end">loads the books</text>
+
+  <!-- The browser -->
+  <g filter="url(#shadow)">
+    <rect x="24" y="60" width="170" height="110" rx="12" class="node"/>
+  </g>
+  <path d="M24 86 H194" stroke="#e5e7eb"/>
+  <circle cx="40" cy="73" r="4" fill="#ee6a5c"/>
+  <circle cx="53" cy="73" r="4" fill="#f0b43f"/>
+  <circle cx="66" cy="73" r="4" fill="#58d08a"/>
+  <rect x="78" y="66" width="108" height="14" rx="7" fill="#f3f4f6"/>
+  <text x="87" y="77" font-size="10" fill="#6b7280">localhost:8090</text>
+  <g transform="translate(34 108) scale(0.62)">
+    <path d="M6 46 L58 46 L36 10 Z" fill="#f6c445" stroke="#d99a1c" stroke-width="3"/>
+    <circle cx="28" cy="36" r="5" fill="#8f5f0a" opacity=".55"/>
+    <circle cx="43" cy="39" r="3.5" fill="#8f5f0a" opacity=".55"/>
+    <circle cx="35" cy="26" r="3" fill="#8f5f0a" opacity=".55"/>
+  </g>
+  <text x="82" y="126" class="title">Cheese App</text>
+  <text x="82" y="145" class="sub">React runs here</text>
+
+  <!-- frontend-react -->
+  <g filter="url(#shadow)">
+    <rect x="254" y="80" width="200" height="70" rx="12" class="node"/>
+  </g>
+  <circle cx="284" cy="115" r="17" fill="#3b82f6"/>
+  <text x="284" y="119.5" class="badge" text-anchor="middle">UI</text>
+  <text x="312" y="111" class="title">frontend-react</text>
+  <text x="312" y="130" class="sub">nginx · 2 pods</text>
+
+  <!-- api-service -->
+  <g filter="url(#shadow)">
+    <rect x="520" y="80" width="210" height="70" rx="12" class="node"/>
+  </g>
+  <circle cx="550" cy="115" r="17" fill="#10a37f"/>
+  <text x="550" y="119.5" class="badge" text-anchor="middle">API</text>
+  <text x="578" y="111" class="title">api-service</text>
+  <text x="578" y="130" class="sub">FastAPI · 2 to 6 pods</text>
+
+  <!-- chat-storage -->
+  <g filter="url(#shadow)">
+    <rect x="254" y="250" width="200" height="70" rx="12" class="node"/>
+  </g>
+  <circle cx="284" cy="285" r="17" fill="#e8710a"/>
+  <text x="284" y="289.5" class="badge" text-anchor="middle" font-size="11">GCS</text>
+  <text x="312" y="281" class="title">chat-storage</text>
+  <text x="312" y="300" class="sub">stands in for GCS</text>
+
+  <!-- vector-db -->
+  <g filter="url(#shadow)">
+    <rect x="520" y="250" width="210" height="70" rx="12" class="node"/>
+  </g>
+  <circle cx="550" cy="285" r="17" fill="#7c3aed"/>
+  <text x="550" y="289.5" class="badge" text-anchor="middle">DB</text>
+  <text x="578" y="281" class="title">vector-db</text>
+  <text x="578" y="300" class="sub">Chroma · its own disk</text>
+
+  <!-- load-vector-db -->
+  <g filter="url(#shadow)">
+    <rect x="520" y="410" width="210" height="70" rx="12" class="node"/>
+  </g>
+  <circle cx="550" cy="445" r="17" fill="#6b7280"/>
+  <text x="550" y="449" class="badge" text-anchor="middle" font-size="11">Job</text>
+  <text x="578" y="441" class="title">load-vector-db</text>
+  <text x="578" y="460" class="sub">a Job: runs once</text>
+
+  <!-- Vertex AI -->
+  <g filter="url(#shadow)">
+    <rect x="776" y="80" width="190" height="70" rx="12" class="node"/>
+  </g>
+  <circle cx="806" cy="115" r="17" fill="#4285f4"/>
+  <text x="806" y="119.5" class="badge" text-anchor="middle">AI</text>
+  <text x="834" y="111" class="title">Vertex AI</text>
+  <text x="834" y="130" class="sub">Gemini</text>
+</svg>

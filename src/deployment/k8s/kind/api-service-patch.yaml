@@ -1,0 +1,26 @@
+# What the API needs on kind and not on GKE
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-service
+spec:
+  template:
+    spec:
+      containers:
+        - name: api-service
+          envFrom:
+            - configMapRef: { name: api-config }
+            - configMapRef: { name: gcp-settings } # GCP_PROJECT, from deploy-kind.sh; the last one wins
+          env:
+            # No Workload Identity here: Gemini is reached with a key file, like the API in docker
+            - name: GOOGLE_APPLICATION_CREDENTIALS
+              value: /secrets/key.json
+          volumeMounts:
+            - { name: gcp-key, mountPath: /secrets, readOnly: true }
+          lifecycle:
+            # kind has no cloud load balancer to wait for, only kube-proxy, which notices in a second
+            preStop:
+              sleep: { seconds: 5 }
+      volumes:
+        - name: gcp-key
+          secret: { secretName: gcp-key }

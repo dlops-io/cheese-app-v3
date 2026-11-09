@@ -1,0 +1,3 @@
+config:
+  gcp:project: ac215-project
+  security:app_service_account_email: gcp-service@ac215-project.iam.gserviceaccount.com

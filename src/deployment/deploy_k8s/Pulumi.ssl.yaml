@@ -1,5 +1,0 @@
-encryptionsalt: v1:vmgGxQyBMLw=:v1:vZuGFwZ7Y0y/nMOr:s1r530hWuVrwvMpJQ88UOOYecoaHVA==
-config:
-  gcp:project: ac215-project
-  security:gcp_service_account_email: deployment@ac215-project.iam.gserviceaccount.com
-  security:gcp_ksa_service_account_email: gcp-service@ac215-project.iam.gserviceaccount.com
