@@ -1,0 +1,136 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 560" width="1000" height="560" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title>Cheese App on GKE</title>
+  <desc>The browser opens the static IP of a Gateway, Google's load balancer. The Gateway sends /api to api-service, which the autoscaler runs as 2 to 6 pods, and everything else to frontend-react, which serves the page. The API searches the cheese books in vector-db, a Chroma StatefulSet with its own disk, saves chats in a Cloud Storage bucket and calls Gemini on Vertex AI. It reaches both as gcp-service, through Workload Identity, with no key file. The load-vector-db Job loads the books into vector-db once, then stops.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#4b5563"/>
+    </marker>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0f172a" flood-opacity="0.08"/>
+    </filter>
+    <style>
+      .title { font-size: 17px; font-weight: 700; fill: #1f2937; }
+      .sub { font-size: 13px; fill: #6b7280; }
+      .badge { font-size: 12px; font-weight: 700; fill: #ffffff; }
+      .label { font-size: 13px; fill: #374151; }
+      .group { font-size: 13px; font-weight: 700; }
+      .node { fill: #ffffff; stroke: #d6dbe1; stroke-width: 1.2; }
+      .line { fill: none; stroke: #4b5563; stroke-width: 1.8; }
+      .once { fill: none; stroke: #4b5563; stroke-width: 1.8; stroke-dasharray: 6 5; }
+    </style>
+  </defs>
+
+  <!-- The card, so the picture reads the same on a light or a dark page -->
+  <rect x="1" y="1" width="998" height="558" rx="18" fill="#ffffff" stroke="#e5e7eb"/>
+
+  <!-- Google Cloud -->
+  <rect x="212" y="20" width="772" height="520" rx="16" fill="#f8f9fa" stroke="#c4c9d0" stroke-width="1.5" stroke-dasharray="7 5"/>
+  <text x="232" y="46" class="group" fill="#4b5563">Google Cloud</text>
+
+  <!-- The GKE cluster -->
+  <rect x="232" y="196" width="512" height="324" rx="16" fill="#f3f6fd" stroke="#a8bff0" stroke-width="1.5" stroke-dasharray="7 5"/>
+  <text x="252" y="506" class="group" fill="#326ce5">GKE cluster · 3 nodes · namespace cheese-app</text>
+
+  <text x="784" y="498" class="sub">as gcp-service, through</text>
+  <text x="784" y="516" class="sub">Workload Identity</text>
+
+  <!-- Arrows, drawn first so the boxes sit on top -->
+  <path class="line" d="M194 125 H252" marker-end="url(#arrow)"/>
+
+  <path class="line" d="M354 160 V248" marker-end="url(#arrow)"/>
+  <text x="364" y="184" class="label">everything else</text>
+
+  <path class="line" d="M454 125 H625 V248" marker-end="url(#arrow)"/>
+  <text x="540" y="114" class="label" text-anchor="middle">/api</text>
+
+  <path class="line" d="M625 320 V398" marker-end="url(#arrow)"/>
+  <text x="615" y="364" class="label" text-anchor="end">searches</text>
+
+  <path class="once" d="M454 435 H518" marker-end="url(#arrow)"/>
+  <text x="486" y="424" class="label" text-anchor="middle">loads</text>
+
+  <path class="line" d="M730 275 H774" marker-end="url(#arrow)"/>
+  <path class="line" d="M730 300 H760 V435 H774" marker-end="url(#arrow)"/>
+
+  <!-- The browser -->
+  <g filter="url(#shadow)">
+    <rect x="24" y="70" width="170" height="110" rx="12" class="node"/>
+  </g>
+  <path d="M24 96 H194" stroke="#e5e7eb"/>
+  <circle cx="40" cy="83" r="4" fill="#ee6a5c"/>
+  <circle cx="53" cy="83" r="4" fill="#f0b43f"/>
+  <circle cx="66" cy="83" r="4" fill="#58d08a"/>
+  <rect x="78" y="76" width="108" height="14" rx="7" fill="#f3f4f6"/>
+  <text x="86" y="87" font-size="10" fill="#6b7280">http://&lt;static IP&gt;</text>
+  <g transform="translate(34 118) scale(0.62)">
+    <path d="M6 46 L58 46 L36 10 Z" fill="#f6c445" stroke="#d99a1c" stroke-width="3"/>
+    <circle cx="28" cy="36" r="5" fill="#8f5f0a" opacity=".55"/>
+    <circle cx="43" cy="39" r="3.5" fill="#8f5f0a" opacity=".55"/>
+    <circle cx="35" cy="26" r="3" fill="#8f5f0a" opacity=".55"/>
+  </g>
+  <text x="82" y="136" class="title">Cheese App</text>
+  <text x="82" y="155" class="sub">React runs here</text>
+
+  <!-- Gateway -->
+  <g filter="url(#shadow)">
+    <rect x="254" y="90" width="200" height="70" rx="12" class="node"/>
+  </g>
+  <circle cx="284" cy="125" r="17" fill="#5f6368"/>
+  <text x="284" y="129.5" class="badge" text-anchor="middle">LB</text>
+  <text x="312" y="121" class="title">Gateway</text>
+  <text x="312" y="140" class="sub">the load balancer</text>
+
+  <!-- frontend-react -->
+  <g filter="url(#shadow)">
+    <rect x="254" y="250" width="200" height="70" rx="12" class="node"/>
+  </g>
+  <circle cx="284" cy="285" r="17" fill="#3b82f6"/>
+  <text x="284" y="289.5" class="badge" text-anchor="middle">UI</text>
+  <text x="312" y="281" class="title">frontend-react</text>
+  <text x="312" y="300" class="sub">nginx · 2 pods</text>
+
+  <!-- api-service -->
+  <g filter="url(#shadow)">
+    <rect x="520" y="250" width="210" height="70" rx="12" class="node"/>
+  </g>
+  <circle cx="550" cy="285" r="17" fill="#10a37f"/>
+  <text x="550" y="289.5" class="badge" text-anchor="middle">API</text>
+  <text x="578" y="281" class="title">api-service</text>
+  <text x="578" y="300" class="sub">FastAPI · 2 to 6 pods</text>
+
+  <!-- load-vector-db -->
+  <g filter="url(#shadow)">
+    <rect x="254" y="400" width="200" height="70" rx="12" class="node"/>
+  </g>
+  <circle cx="284" cy="435" r="17" fill="#6b7280"/>
+  <text x="284" y="439" class="badge" text-anchor="middle" font-size="11">Job</text>
+  <text x="312" y="431" class="title">load-vector-db</text>
+  <text x="312" y="450" class="sub">a Job: runs once</text>
+
+  <!-- vector-db -->
+  <g filter="url(#shadow)">
+    <rect x="520" y="400" width="210" height="70" rx="12" class="node"/>
+  </g>
+  <circle cx="550" cy="435" r="17" fill="#7c3aed"/>
+  <text x="550" y="439.5" class="badge" text-anchor="middle">DB</text>
+  <text x="578" y="431" class="title">vector-db</text>
+  <text x="578" y="450" class="sub">Chroma · its own disk</text>
+
+  <!-- Cloud Storage -->
+  <g filter="url(#shadow)">
+    <rect x="776" y="240" width="190" height="70" rx="12" class="node"/>
+  </g>
+  <circle cx="806" cy="275" r="17" fill="#e8710a"/>
+  <text x="806" y="279.5" class="badge" text-anchor="middle" font-size="11">GCS</text>
+  <text x="834" y="271" class="title">Cloud Storage</text>
+  <text x="834" y="290" class="sub">the chat bucket</text>
+
+  <!-- Vertex AI -->
+  <g filter="url(#shadow)">
+    <rect x="776" y="400" width="190" height="70" rx="12" class="node"/>
+  </g>
+  <circle cx="806" cy="435" r="17" fill="#4285f4"/>
+  <text x="806" y="439.5" class="badge" text-anchor="middle">AI</text>
+  <text x="834" y="431" class="title">Vertex AI</text>
+  <text x="834" y="450" class="sub">Gemini</text>
+</svg>

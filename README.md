@@ -100,14 +100,7 @@ are ordinary containers and images on your laptop.
 kind runs a Kubernetes cluster as three containers on your laptop: one control plane and two workers.
 Everything in this tutorial runs inside the deployment container.
 
-```mermaid
-graph LR
-    B[Browser] -->|localhost:8090| F[frontend-react<br/>nginx, 2 pods]
-    F -->|/api| A[api-service<br/>2 to 6 pods]
-    A --> V[(vector-db<br/>Chroma)]
-    A --> S[(chat-storage<br/>stands in for Cloud Storage)]
-    J[load-vector-db<br/>Job, once] -.-> V
-```
+![The Cheese App on kind: the browser, frontend-react, api-service, vector-db, chat-storage and the load-vector-db Job in the cluster, and Gemini on Vertex AI](images/kind-architecture.svg)
 
 ### Create the cluster
 1. Create it, with metrics-server, which measures each pod's CPU for the autoscaler. This takes about a
@@ -471,16 +464,7 @@ cd /app/deploy_vm && pulumi destroy --stack dev -y
 The YAML from the laptop cluster, on a GKE cluster. Run everything in the deployment container, after
 `deploy_base` and `deploy_images` from the previous tutorial.
 
-```mermaid
-graph LR
-    B[Browser] -->|static IP| G[Gateway<br/>Google's load balancer]
-    G -->|/api| A[api-service<br/>2 to 6 pods]
-    G -->|everything else| F[frontend-react<br/>2 pods]
-    A --> V[(vector-db<br/>Chroma)]
-    A --> S[(Cloud Storage<br/>chat bucket)]
-    A --> M[Vertex AI<br/>Gemini]
-    J[load-vector-db<br/>Job, once] -.-> V
-```
+![The Cheese App on GKE: the Gateway, frontend-react, api-service, vector-db and the load-vector-db Job, with Cloud Storage and Gemini on Vertex AI](images/gke-architecture.svg)
 
 ### Create the cluster
 `deploy_k8s` creates a network, a GKE cluster with three `e2-standard-2` nodes, and Workload Identity,
