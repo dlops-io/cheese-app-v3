@@ -6,7 +6,7 @@ containers on Kubernetes, first on our laptop and then on Google Cloud:
 | Tutorial | Where it runs | What it shows |
 | --- | --- | --- |
 | [Kubernetes on your laptop](#tutorial-kubernetes-on-your-laptop) | kind, a cluster in Docker | Scaling, rolling updates and self-healing, for free |
-| [Deploy to a VM by hand](#tutorial-deploy-to-a-vm-by-hand) | One Compute Engine VM | Every step of a deployment, typed by hand |
+| [Deploy to a VM by hand](#tutorial-deploy-to-a-vm-by-hand) | One Compute Engine VM | A VM made in the console, set up by one script |
 | [Deploy to a VM with Pulumi](#tutorial-deploy-to-a-vm-with-pulumi) | One Compute Engine VM | The same steps as code |
 | [Kubernetes on GKE](#tutorial-kubernetes-on-gke) | A GKE cluster | The laptop cluster's YAML, on Google Cloud |
 
@@ -41,7 +41,7 @@ settings the frontend and the API agree on are in [docs/contract.md](docs/contra
 ### Create the local folders
 
 We never put secrets in Git, so they live outside the repository. Next to the `cheese-app-v3` folder,
-create a **secrets** folder, with your `ml-workflow.json` in it. You will add two more keys before the
+create a **secrets** folder, with your `ml-workflow.json` in it. You will add one more key before the
 Google Cloud tutorials.
 
 Your folder structure should look like this:
@@ -56,7 +56,6 @@ Your folder structure should look like this:
    |-secrets
      |---ml-workflow.json
      |---deployment.json      (for Google Cloud)
-     |---gcp-service.json     (for Google Cloud)
 ```
 
 ### Set your Google Cloud project
@@ -253,9 +252,6 @@ takes about 12 minutes and asks Gemini one question (`SKIP_GEMINI=1` leaves that
 ## Tutorial: Google Cloud Setup
 Do this once, before the Google Cloud tutorials.
 
-> **Note:** the three Google Cloud tutorials below are new this term and have not been run on Google
-> Cloud yet. The laptop tutorial above has.
-
 ### Enable the APIs
 Search for each of these in the Google Cloud console and enable it:
 - Compute Engine API
@@ -267,17 +263,17 @@ Search for each of these in the Google Cloud console and enable it:
 - Service Usage API
 
 ### Create the service accounts
-In the console, go to **IAM & Admin > Service accounts** and create two accounts. For each one,
-choose **Actions > Manage keys > Add key > JSON**, and save the key in your **secrets** folder with the
-name below.
+In the console, go to **IAM & Admin > Service accounts** and create two accounts. For `deployment`,
+choose **Actions > Manage keys > Add key > JSON**, and save the key in your **secrets** folder as
+`deployment.json`.
 
 | Account | Key file | Roles | Used by |
 | --- | --- | --- | --- |
 | `deployment` | `deployment.json` | Compute Admin, Artifact Registry Administrator, Kubernetes Engine Admin, Storage Admin, Service Account User, Service Account Admin | The deployment container, to create everything |
-| `gcp-service` | `gcp-service.json` | Vertex AI User, Artifact Registry Reader | The app on Google Cloud, to call Gemini and pull images |
+| `gcp-service` | None | Vertex AI User, Artifact Registry Reader | The app on Google Cloud, to call Gemini and pull images |
 
-Service Account Admin lets Pulumi allow the API's pods on GKE to act as `gcp-service`, so they need no
-key file. `deploy_base` gives `gcp-service` access to the chat bucket.
+`gcp-service` needs no key: the VMs run as it, and on GKE the API's pods act as it. Service Account
+Admin lets Pulumi set that up for the pods. `deploy_base` gives `gcp-service` access to the chat bucket.
 
 ### Set your project in the Pulumi stacks
 Replace `ac215-project` with your project ID in these files:
@@ -297,122 +293,81 @@ gcloud auth list
 ```
 
 ## Tutorial: Deploy to a VM by hand
-We create one VM and start the same four containers on it, typing every step ourselves.
-
-### Push the images to Docker Hub
-Sign up at [Docker Hub](https://hub.docker.com), then, from the `cheese-app-v3` folder on your laptop
-(not in a container), log in and push the three production images. Replace `YOUR_USER` with your
-Docker Hub username. Google's VMs are `linux/amd64`, so we build for that, whatever your laptop is:
-```bash
-docker login -u YOUR_USER
-```
-
-```bash
-docker buildx build --platform linux/amd64 -t YOUR_USER/cheese-app-api-service --push src/api-service
-```
-
-```bash
-docker buildx build --platform linux/amd64 -t YOUR_USER/cheese-app-frontend-react --push src/frontend-react
-```
-
-```bash
-docker buildx build --platform linux/amd64 -t YOUR_USER/cheese-app-vector-db-cli --push src/vector-db
-```
+The way many apps first go live: make a VM in the console, clone the repo on it, and run one script.
+The script, `src/deployment/vm/setup-vm.sh`, installs Docker, builds the images from the code you
+cloned, loads the books and starts the same four containers as on the laptop, with
+`src/deployment/vm/docker-compose.yml`.
 
 ### Create the VM
 In the console, go to **Compute Engine > VM instances > Create instance**. Keep the defaults, except:
-- Machine type: **n2d-standard-2**
-- **OS and storage:** a 50 GB disk
-- **Networking:** allow HTTP traffic
+- **Machine configuration:** machine type **n2d-standard-2**
+- **OS and storage:** Debian 12, with a **50 GB** disk
+- **Networking:** tick **Allow HTTP traffic**
+- **Security > Identity and API access:** service account **gcp-service**, and **Allow full access to
+  all Cloud APIs**. The app calls Gemini as this account, so the VM needs no key file.
 
-Then choose **SSH** next to the new VM.
+Choose **Create**, then **SSH** next to the new VM.
 
-### Install Docker
+### Run the setup script
 On the VM:
+1. Install git, which Debian's image does not have:
 ```bash
-curl -fsSL https://get.docker.com -o get-docker.sh
+sudo apt-get update && sudo apt-get install -y git
+```
+
+2. Clone the repo:
+```bash
+git clone https://github.com/dlops-io/cheese-app-v3
 ```
 
 ```bash
-sudo sh get-docker.sh
+cd cheese-app-v3
 ```
 
+3. Read `src/deployment/vm/setup-vm.sh`, then run it. About 4 minutes, most of it building the images:
 ```bash
-sudo docker --version
+./src/deployment/vm/setup-vm.sh
 ```
 
-### Create the folders and the key
-```bash
-sudo mkdir persistent-folder secrets
-```
-
-```bash
-sudo chmod 0777 persistent-folder secrets
-```
-
-Paste the contents of your `gcp-service.json` between the quotes:
-```bash
-echo '<___Json Key___>' > secrets/gcp-service.json
-```
-
-### Start the containers
-1. A network, so the containers find each other by name:
-```bash
-sudo docker network create cheese-app-network
-```
-
-2. Chroma:
-```bash
-sudo docker run -d --name cheese-app-vector-db --network cheese-app-network -e ANONYMIZED_TELEMETRY=FALSE -v "$(pwd)/docker-volumes/chromadb":/data --restart always chromadb/chroma:1.5.9
-```
-
-3. Load the books. This downloads the embeddings we made for you, so it needs no key:
-```bash
-sudo docker run --rm --network cheese-app-network -e GCP_PROJECT=YOUR_PROJECT -e CHROMADB_HOST=cheese-app-vector-db -e CHROMADB_PORT=8000 YOUR_USER/cheese-app-vector-db-cli cli.py --download --load --chunk_type recursive-split
-```
-
-4. The API:
-```bash
-sudo docker run -d --name cheese-app-api-service --network cheese-app-network -v "$(pwd)/persistent-folder":/persistent -v "$(pwd)/secrets":/secrets:ro -e GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-service.json -e GCP_PROJECT=YOUR_PROJECT --restart always YOUR_USER/cheese-app-api-service
-```
-
-5. The frontend, on port 80. Start it after the API: nginx looks the API up when it starts.
-```bash
-sudo docker run -d --name cheese-app-frontend-react --network cheese-app-network -p 80:80 --restart always YOUR_USER/cheese-app-frontend-react
-```
-
-6. Open `http://<your VM's external IP>`. The API docs are at `http://<your VM's external IP>/api/docs`.
+4. When it says `The Cheese App is running`, open the address it prints. The API docs are at
+   `http://<your VM's external IP>/api/docs`.
 
 There is no separate web server: the frontend image is nginx, and it passes `/api` to the API, the
-same as on the laptop. Only port 80 is open to the world.
+same as on the laptop. Only port 80 is open to the world. The books and the chats are in
+`/var/lib/cheese-app` on the VM, outside the repo.
+
+### Update the app
+To deploy new code, SSH in again, pull it and run the script again. It rebuilds only what changed,
+and leaves the books and the chats where they are:
+```bash
+cd cheese-app-v3 && git pull && ./src/deployment/vm/setup-vm.sh
+```
+
+The containers have `restart: always`, so they also come back by themselves after the VM reboots.
 
 ### Look inside
+From `src/deployment/vm`:
 ```bash
-sudo docker ps
+sudo docker compose ps
 ```
 
 ```bash
-sudo docker logs cheese-app-api-service -f
+sudo docker compose logs api-service -f
 ```
 
 ```bash
-sudo docker exec -it cheese-app-api-service bash
+sudo docker compose exec api-service bash
 ```
 
 The frontend's image is Alpine Linux, which has `sh` rather than `bash`.
-
-If you replace the API container, restart the frontend too: nginx keeps the address it looked up, and
-answers `502` until it restarts. On Kubernetes, a Service gives the API one address that never changes.
-```bash
-sudo docker restart cheese-app-frontend-react
-```
 
 ### Delete the VM
 In the console, select the VM and choose **Delete**.
 
 ## Tutorial: Deploy to a VM with Pulumi
 Now the same deployment as code. Pulumi creates the VM, and the VM runs `deploy_vm/startup.sh` when it
-boots: the commands you typed by hand, as a script. Run everything in the deployment container.
+boots: what `setup-vm.sh` did, with images built once and pulled from Artifact Registry. Run everything
+in the deployment container.
 
 ### Create the shared pieces
 `deploy_base` holds what outlives a VM or a cluster: a static IP for GKE, an Artifact Registry
@@ -436,8 +391,8 @@ code changes.
 cd /app/deploy_vm && pulumi stack init dev && pulumi up --stack dev -y
 ```
 
-Pulumi finishes before the VM does: the VM still has to install Docker, pull the images and load
-the books. Watch it, until you see `Cheese App containers started`:
+Pulumi finishes in about a minute, before the VM does: the VM still has to install Docker, pull the
+images and load the books, about 2 minutes more. Watch it, until you see `Cheese App containers started`:
 ```bash
 gcloud compute instances get-serial-port-output cheese-app-vm --zone us-central1-a | grep startup-script
 ```
@@ -448,7 +403,9 @@ pulumi stack output app_url
 ```
 
 What is different from doing it by hand:
-- **No key file on the VM:** it runs as `gcp-service`, so Gemini and Artifact Registry work without one
+- **No console and no SSH:** run `pulumi up` again and nothing changes, because Pulumi records what it
+  made. `pulumi destroy` deletes all of it, in the right order. By hand, you remember what you made.
+- **The images are built once,** on your laptop, and every VM pulls the same ones from Artifact Registry
 - **The chats are in the bucket,** so they outlive the VM
 - **New images replace the whole VM.** Run `deploy_images` and then `deploy_vm` again, and the app is down
   for a few minutes while the new VM starts. Kubernetes replaces pods one at a time instead.
@@ -468,7 +425,7 @@ The YAML from the laptop cluster, on a GKE cluster. Run everything in the deploy
 
 ### Create the cluster
 `deploy_k8s` creates a network, a GKE cluster with three `e2-standard-2` nodes, and Workload Identity,
-which lets the API's pods act as `gcp-service` with no key file. About 10 minutes:
+which lets the API's pods act as `gcp-service` with no key file. About 11 minutes:
 ```bash
 cd /app/deploy_k8s && pulumi stack init dev && pulumi up --stack dev -y
 ```
@@ -479,8 +436,9 @@ cd /app && ./scripts/deploy-k8s.sh
 ```
 
 It applies `k8s/gke`: everything in `k8s/base`, plus a Gateway, which makes Google's load balancer.
-It also pins the images `deploy_images` pushed and fills in your project. When it is done it prints
-the app's address. The load balancer can take a few minutes more before that address answers.
+It also pins the images `deploy_images` pushed and fills in your project. It takes about 4 minutes,
+and prints the app's address. The load balancer takes about 2 minutes more before that address
+answers.
 
 ### Try it
 The commands from the laptop work here too, with `-n cheese-app`:
@@ -489,8 +447,18 @@ kubectl -n cheese-app get pods,hpa -w
 ```
 
 ```bash
-./scripts/load.sh 3000 8 http://<the app's address>
+./scripts/load.sh 1000 8 http://<the app's address>
 ```
+
+What we saw on GKE:
+- The first new pods arrive about 25 s after the load starts, and all 6 are ready about 70 s in
+- Every request answers, but at about 6 a second, against about 25 on a laptop: the 3 small nodes
+  have about 6 CPUs between them, and 6 API pods fill them. More pods would not help; more nodes
+  would. That is the Cluster Autoscaler's job, and this cluster has a fixed 3 nodes. 1000 requests
+  take about 3 minutes, 3000 about 8
+- About 1.5 minutes after the load stops, the autoscaler is back to 2 pods
+- `kubectl -n cheese-app rollout restart deployment/api-service` under load answers every request
+  too. It takes about 4 minutes here: each old pod gets up to 150 s to finish what it started
 
 `deploy-k8s.sh` switched kubectl to the GKE cluster. To go back to the laptop cluster:
 ```bash
@@ -509,7 +477,8 @@ kubectl config use-context kind-cheese-app
 | `scripts/destroy-k8s.sh` | Takes the cluster down in the right order |
 
 ### Delete the cluster
-Delete the workloads first, so that Google removes the load balancer, then the cluster:
+Delete the workloads first, so that Google removes the load balancer, then the cluster. About 15
+minutes: 6 for the workloads and the load balancer, 9 for the cluster:
 ```bash
 cd /app && ./scripts/destroy-k8s.sh
 ```

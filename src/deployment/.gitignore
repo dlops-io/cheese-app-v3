@@ -5,3 +5,5 @@ docker-config/
 .venv/
 __pycache__/
 .ruff_cache/
+# Written by vm/setup-vm.sh on the VM
+vm/.env
