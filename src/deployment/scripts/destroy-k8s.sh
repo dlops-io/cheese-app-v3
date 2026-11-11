@@ -15,7 +15,9 @@ gateway_ip="$(output deploy_base gateway_ip)"
 gcloud container clusters get-credentials "${cluster}" --zone "${zone}" --project "${GCP_PROJECT}"
 context="gke_${GCP_PROJECT}_${zone}_${cluster}"
 
-kubectl --context "${context}" delete namespace cheese-app --ignore-not-found --wait=true --timeout=300s
+# About 6 minutes on GKE: the API pods take up to 150 s to stop, and GKE removes the load balancer's
+# network endpoint groups before the namespace can go
+kubectl --context "${context}" delete namespace cheese-app --ignore-not-found --wait=true --timeout=900s
 echo "Waiting for the load balancer to let go of ${gateway_ip}..."
 for _ in $(seq 1 60); do
     rules="$(gcloud compute forwarding-rules list --global --filter="IPAddress=${gateway_ip}" --format="value(name)")"

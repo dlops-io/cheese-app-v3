@@ -1,0 +1,50 @@
+# The Cheese App on one VM. setup-vm.sh builds these images from this repo and starts them.
+# The same four containers as on the laptop, each from its production Dockerfile.
+name: cheese-app
+
+services:
+  vector-db: # Chroma, keeping the books on the VM's disk
+    image: chromadb/chroma:1.5.9
+    environment:
+      ANONYMIZED_TELEMETRY: "FALSE"
+    volumes:
+      - ${DATA_DIR:?}/chromadb:/data
+    restart: always
+
+  load-books: # Loads the books into Chroma. setup-vm.sh runs it once, then it stops.
+    build: ../../vector-db
+    image: cheese-app-vector-db-cli
+    profiles: [books] # not started by `docker compose up`
+    command: [cli.py, --download, --load, --chunk_type, recursive-split]
+    environment:
+      GCP_PROJECT: ${GCP_PROJECT:?}
+      CHROMADB_HOST: vector-db
+      CHROMADB_PORT: "8000"
+    depends_on: [vector-db]
+
+  api-service:
+    build: ../../api-service
+    image: cheese-app-api-service
+    environment:
+      GCP_PROJECT: ${GCP_PROJECT:?}
+      CHROMADB_HOST: vector-db
+      # No key file: the API calls Gemini as the VM's service account. No CHAT_BUCKET either: with one
+      # API, the chats can live in a folder on the VM.
+    volumes:
+      - ${DATA_DIR:?}/persistent:/persistent
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:9000/healthz')"]
+      interval: 5s
+      retries: 30
+    restart: always
+
+  frontend-react: # nginx: the page, and /api passed to the API
+    build: ../../frontend-react
+    image: cheese-app-frontend-react
+    environment:
+      API_URL: http://api-service:9000
+    ports:
+      - 80:80 # the only port open to the world
+    depends_on:
+      api-service: { condition: service_healthy } # nginx looks the API up when it starts
+    restart: always

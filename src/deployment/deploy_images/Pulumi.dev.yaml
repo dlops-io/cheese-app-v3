@@ -1,2 +1,3 @@
 config:
   gcp:project: ac215-project
+encryptionsalt: v1:X6/fd6nqVF4=:v1:X5jcd+nVqYraZLsi:ygyAXMy76r13KfP6gslP2oQU24E5lg==

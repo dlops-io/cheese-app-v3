@@ -1,3 +1,4 @@
 config:
   gcp:project: ac215-project
   security:app_service_account_email: gcp-service@ac215-project.iam.gserviceaccount.com
+encryptionsalt: v1:vuY+5NQX0s4=:v1:DqBPCDGw/+v6i6O1:rMjRr3c4VEy57LxdO/jjHvP0kwQWzA==
