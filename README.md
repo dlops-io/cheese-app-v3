@@ -28,7 +28,7 @@ settings the frontend and the API agree on are in [docs/contract.md](docs/contra
 - Docker, with at least 8 GB of memory and 4 CPUs for Docker (Docker Desktop: **Settings > Resources**),
   and port 8090 free
 - The `ml-workflow.json` service account key from `cheese-app-v2`. The account needs the
-  **Vertex AI User** role.
+  **Agent Platform User** role (`roles/aiplatform.user`, called Vertex AI User before).
 - About 15 GB of free disk space
 - For the Google Cloud tutorials: a project with billing on. A VM or a cluster costs money every hour
   it runs, so delete it when you are done.
@@ -270,10 +270,13 @@ choose **Actions > Manage keys > Add key > JSON**, and save the key in your **se
 | Account | Key file | Roles | Used by |
 | --- | --- | --- | --- |
 | `deployment` | `deployment.json` | Compute Admin, Artifact Registry Administrator, Kubernetes Engine Admin, Storage Admin, Service Account User, Service Account Admin | The deployment container, to create everything |
-| `gcp-service` | None | Vertex AI User, Artifact Registry Reader | The app on Google Cloud, to call Gemini and pull images |
+| `gcp-service` | None | Agent Platform User, Artifact Registry Reader | The app on Google Cloud, to call Gemini and pull images |
 
 `gcp-service` needs no key: the VMs run as it, and on GKE the API's pods act as it. Service Account
 Admin lets Pulumi set that up for the pods. `deploy_base` gives `gcp-service` access to the chat bucket.
+
+Agent Platform User is `roles/aiplatform.user`, called Vertex AI User before. Not **AI Platform Admin**:
+that is an older product's role, and with it Gemini answers 403.
 
 ### Set your project in the Pulumi stacks
 Replace `ac215-project` with your project ID in these files:
@@ -297,6 +300,8 @@ The way many apps first go live: make a VM in the console, clone the repo on it,
 The script, `src/deployment/vm/setup-vm.sh`, installs Docker, builds the images from the code you
 cloned, loads the books and starts the same four containers as on the laptop, with
 `src/deployment/vm/docker-compose.yml`.
+
+![The Cheese App on a VM made by hand: GitHub, cloned onto the VM; frontend-react, api-service, vector-db and load-books in Docker Compose; the books and chats on the VM disk; Gemini on Vertex AI](images/vm-manual-architecture.svg)
 
 ### Create the VM
 In the console, go to **Compute Engine > VM instances > Create instance**. Keep the defaults, except:
@@ -368,6 +373,8 @@ In the console, select the VM and choose **Delete**.
 Now the same deployment as code. Pulumi creates the VM, and the VM runs `deploy_vm/startup.sh` when it
 boots: what `setup-vm.sh` did, with images built once and pulled from Artifact Registry. Run everything
 in the deployment container.
+
+![The Cheese App on a VM made by Pulumi: frontend-react, api-service, vector-db and load-books on the VM, with the images from Artifact Registry, the chats in Cloud Storage and Gemini on Vertex AI](images/vm-pulumi-architecture.svg)
 
 ### Create the shared pieces
 `deploy_base` holds what outlives a VM or a cluster: a static IP for GKE, an Artifact Registry
@@ -493,7 +500,8 @@ cd /app && ./scripts/destroy-k8s.sh
 | An API pod is `0/1` for minutes | It downloads the CNN model from GitHub when it starts, so it needs the internet. Check with `kubectl logs <pod name>` |
 | `ErrImageNeverPull` or `ImagePullBackOff` on the laptop | The images are not in the nodes. Run `./scripts/deploy-kind.sh` again |
 | kubectl answers about the wrong cluster | Check with `kubectl config current-context`, then `kubectl config use-context kind-cheese-app` |
-| Ask says `Gemini: 403` or `PERMISSION_DENIED` | Check `GCP_PROJECT`, the Vertex AI API and the service account's role |
+| Ask says `Gemini: 403 ... aiplatform.endpoints.predict` | The account lacks **Agent Platform User** (`roles/aiplatform.user`). Grant it in **IAM & Admin > IAM**; it works a minute later, with no restart |
+| Ask says another `Gemini: 403` or `PERMISSION_DENIED` | Check `GCP_PROJECT` and that the Vertex AI API is enabled |
 | Ask says `Gemini: 404` | Google retired the model. Change `GENERATIVE_MODEL` in `api/settings.py` |
 | The VM's page does not load | It is still starting: watch the serial port output, as in the Pulumi VM tutorial |
 | `deploy_k8s` fails with `iam.serviceAccounts.setIamPolicy` | Give `deployment` the Service Account Admin role, then `pulumi up` again |
