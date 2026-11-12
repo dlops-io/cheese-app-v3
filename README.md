@@ -373,14 +373,14 @@ in the deployment container.
 `deploy_base` holds what outlives a VM or a cluster: a static IP for GKE, an Artifact Registry
 repository for our images, and a bucket for the chats.
 ```bash
-cd /app/deploy_base && pulumi stack init dev && pulumi up --stack dev -y
+cd /app/deploy_base && pulumi stack select dev --create && pulumi up --stack dev -y
 ```
 
 ### Build and push the images
 `deploy_images` builds the three production images for `linux/amd64` and pushes them to Artifact
 Registry. A few minutes the first time:
 ```bash
-cd /app/deploy_images && pulumi stack init dev && pulumi up --stack dev -y
+cd /app/deploy_images && pulumi stack select dev --create && pulumi up --stack dev -y
 ```
 
 Each image's tag is a hash of its files, so an image is only rebuilt, and pods only replaced, when its
@@ -388,7 +388,7 @@ code changes.
 
 ### Create the VM
 ```bash
-cd /app/deploy_vm && pulumi stack init dev && pulumi up --stack dev -y
+cd /app/deploy_vm && pulumi stack select dev --create && pulumi up --stack dev -y
 ```
 
 Pulumi finishes in about a minute, before the VM does: the VM still has to install Docker, pull the
@@ -427,7 +427,7 @@ The YAML from the laptop cluster, on a GKE cluster. Run everything in the deploy
 `deploy_k8s` creates a network, a GKE cluster with three `e2-standard-2` nodes, and Workload Identity,
 which lets the API's pods act as `gcp-service` with no key file. About 11 minutes:
 ```bash
-cd /app/deploy_k8s && pulumi stack init dev && pulumi up --stack dev -y
+cd /app/deploy_k8s && pulumi stack select dev --create && pulumi up --stack dev -y
 ```
 
 ### Deploy the app
