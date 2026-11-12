@@ -1,0 +1,160 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 560" width="1000" height="560" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title>Cheese App on a VM, with Pulumi</title>
+  <desc>Pulumi, in the deployment container, makes the VM with deploy_vm, along with its static IP and firewall. At every boot the VM runs startup.sh, which pulls the images that deploy_images built once from Artifact Registry and starts the same four containers. The browser opens the static IP on port 80, where frontend-react, nginx, serves the page and passes /api to api-service, one container. The API searches the cheese books in vector-db, Chroma, which keeps them in /var/lib/cheese-app on the VM's disk, saves chats in a Cloud Storage bucket and calls Gemini on Vertex AI, both as gcp-service, the VM's service account, with no key file. load-books loads the books into vector-db once per VM.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#4b5563"/>
+    </marker>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0f172a" flood-opacity="0.08"/>
+    </filter>
+    <style>
+      .title { font-size: 17px; font-weight: 700; fill: #1f2937; }
+      .sub { font-size: 13px; fill: #6b7280; }
+      .badge { font-size: 12px; font-weight: 700; fill: #ffffff; }
+      .label { font-size: 13px; fill: #374151; }
+      .group { font-size: 13px; font-weight: 700; }
+      .node { fill: #ffffff; stroke: #d6dbe1; stroke-width: 1.2; }
+      .line { fill: none; stroke: #4b5563; stroke-width: 1.8; }
+      .once { fill: none; stroke: #4b5563; stroke-width: 1.8; stroke-dasharray: 6 5; }
+    </style>
+  </defs>
+
+  <!-- The card, so the picture reads the same on a light or a dark page -->
+  <rect x="1" y="1" width="998" height="558" rx="18" fill="#ffffff" stroke="#e5e7eb"/>
+
+  <!-- Google Cloud -->
+  <rect x="212" y="20" width="772" height="520" rx="16" fill="#f8f9fa" stroke="#c4c9d0" stroke-width="1.5" stroke-dasharray="7 5"/>
+  <text x="232" y="46" class="group" fill="#4b5563">Google Cloud</text>
+
+  <!-- The VM -->
+  <rect x="232" y="60" width="512" height="460" rx="16" fill="#eef8f9" stroke="#8fcbd5" stroke-width="1.5" stroke-dasharray="7 5"/>
+  <text x="252" y="86" class="group" fill="#0e7490">VM made by Pulumi · startup.sh runs at every boot</text>
+  <text x="784" y="352" class="sub">as gcp-service, the VM's</text>
+  <text x="784" y="370" class="sub">service account: no key file</text>
+  <text x="784" y="500" class="sub">built once by deploy_images;</text>
+  <text x="784" y="518" class="sub">the VM pulls them at boot</text>
+  <text x="24" y="500" class="sub">deploy_vm makes the VM,</text>
+  <text x="24" y="518" class="sub">its static IP and firewall</text>
+
+  <!-- Arrows, drawn first so the boxes sit on top -->
+  <path class="line" d="M194 145 H252" marker-end="url(#arrow)"/>
+
+  <path class="line" d="M454 145 H518" marker-end="url(#arrow)"/>
+  <text x="486" y="134" class="label" text-anchor="middle">/api</text>
+
+  <path class="line" d="M730 135 H774" marker-end="url(#arrow)"/>
+  <path class="line" d="M730 160 H760 V295 H774" marker-end="url(#arrow)"/>
+
+  <path class="line" d="M625 180 V258" marker-end="url(#arrow)"/>
+  <text x="615" y="226" class="label" text-anchor="end">searches</text>
+
+  <path class="line" d="M520 295 H456" marker-end="url(#arrow)"/>
+  <text x="487" y="285" class="label" text-anchor="middle">books</text>
+
+  <path class="once" d="M625 410 V332" marker-end="url(#arrow)"/>
+  <text x="615" y="380" class="label" text-anchor="end">loads the books</text>
+
+  <path class="once" d="M774 445 H746" marker-end="url(#arrow)"/>
+  <path class="once" d="M194 445 H230" marker-end="url(#arrow)"/>
+
+  <!-- The browser -->
+  <g filter="url(#shadow)">
+    <rect x="24" y="90" width="170" height="110" rx="12" class="node"/>
+  </g>
+  <path d="M24 116 H194" stroke="#e5e7eb"/>
+  <circle cx="40" cy="103" r="4" fill="#ee6a5c"/>
+  <circle cx="53" cy="103" r="4" fill="#f0b43f"/>
+  <circle cx="66" cy="103" r="4" fill="#58d08a"/>
+  <rect x="78" y="96" width="108" height="14" rx="7" fill="#f3f4f6"/>
+  <text x="86" y="107" font-size="10" fill="#6b7280">http://&lt;static IP&gt;</text>
+  <g transform="translate(34 138) scale(0.62)">
+    <path d="M6 46 L58 46 L36 10 Z" fill="#f6c445" stroke="#d99a1c" stroke-width="3"/>
+    <circle cx="28" cy="36" r="5" fill="#8f5f0a" opacity=".55"/>
+    <circle cx="43" cy="39" r="3.5" fill="#8f5f0a" opacity=".55"/>
+    <circle cx="35" cy="26" r="3" fill="#8f5f0a" opacity=".55"/>
+  </g>
+  <text x="82" y="156" class="title">Cheese App</text>
+  <text x="82" y="175" class="sub">React runs here</text>
+
+  <!-- Pulumi, in the deployment container -->
+  <g filter="url(#shadow)">
+    <rect x="24" y="410" width="170" height="70" rx="12" class="node"/>
+  </g>
+  <circle cx="54" cy="445" r="17" fill="#be185d"/>
+  <text x="54" y="449.5" class="badge" text-anchor="middle">Pu</text>
+  <text x="82" y="441" class="title">Pulumi</text>
+  <text x="82" y="460" class="sub">on your laptop</text>
+
+  <!-- frontend-react -->
+  <g filter="url(#shadow)">
+    <rect x="254" y="110" width="200" height="70" rx="12" class="node"/>
+  </g>
+  <circle cx="284" cy="145" r="17" fill="#3b82f6"/>
+  <text x="284" y="149.5" class="badge" text-anchor="middle">UI</text>
+  <text x="312" y="141" class="title">frontend-react</text>
+  <text x="312" y="160" class="sub">nginx · port 80</text>
+
+  <!-- api-service -->
+  <g filter="url(#shadow)">
+    <rect x="520" y="110" width="210" height="70" rx="12" class="node"/>
+  </g>
+  <circle cx="550" cy="145" r="17" fill="#10a37f"/>
+  <text x="550" y="149.5" class="badge" text-anchor="middle">API</text>
+  <text x="578" y="141" class="title">api-service</text>
+  <text x="578" y="160" class="sub">FastAPI · 1 container</text>
+
+  <!-- The VM's disk -->
+  <g filter="url(#shadow)">
+    <rect x="254" y="260" width="200" height="70" rx="12" class="node"/>
+  </g>
+  <circle cx="284" cy="295" r="17" fill="#475569"/>
+  <text x="284" y="299.5" class="badge" text-anchor="middle">VM</text>
+  <text x="312" y="291" class="title">VM disk</text>
+  <text x="312" y="310" class="sub">/var/lib/cheese-app</text>
+
+  <!-- vector-db -->
+  <g filter="url(#shadow)">
+    <rect x="520" y="260" width="210" height="70" rx="12" class="node"/>
+  </g>
+  <circle cx="550" cy="295" r="17" fill="#7c3aed"/>
+  <text x="550" y="299.5" class="badge" text-anchor="middle">DB</text>
+  <text x="578" y="291" class="title">vector-db</text>
+  <text x="578" y="310" class="sub">Chroma</text>
+
+  <!-- load-books -->
+  <g filter="url(#shadow)">
+    <rect x="520" y="410" width="210" height="70" rx="12" class="node"/>
+  </g>
+  <circle cx="550" cy="445" r="17" fill="#6b7280"/>
+  <text x="550" y="449" class="badge" text-anchor="middle" font-size="11">Job</text>
+  <text x="578" y="441" class="title">load-books</text>
+  <text x="578" y="460" class="sub">runs once per VM</text>
+
+  <!-- Cloud Storage -->
+  <g filter="url(#shadow)">
+    <rect x="776" y="100" width="190" height="70" rx="12" class="node"/>
+  </g>
+  <circle cx="806" cy="135" r="17" fill="#e8710a"/>
+  <text x="806" y="139" class="badge" text-anchor="middle" font-size="11">GCS</text>
+  <text x="834" y="131" class="title">Cloud Storage</text>
+  <text x="834" y="150" class="sub">the chat bucket</text>
+
+  <!-- Vertex AI -->
+  <g filter="url(#shadow)">
+    <rect x="776" y="260" width="190" height="70" rx="12" class="node"/>
+  </g>
+  <circle cx="806" cy="295" r="17" fill="#4285f4"/>
+  <text x="806" y="299.5" class="badge" text-anchor="middle">AI</text>
+  <text x="834" y="291" class="title">Vertex AI</text>
+  <text x="834" y="310" class="sub">Gemini</text>
+
+  <!-- Artifact Registry -->
+  <g filter="url(#shadow)">
+    <rect x="776" y="410" width="190" height="70" rx="12" class="node"/>
+  </g>
+  <circle cx="806" cy="445" r="17" fill="#db4437"/>
+  <text x="806" y="449.5" class="badge" text-anchor="middle">AR</text>
+  <text x="834" y="441" class="title" style="font-size: 14px">Artifact Registry</text>
+  <text x="834" y="460" class="sub">the images</text>
+</svg>
